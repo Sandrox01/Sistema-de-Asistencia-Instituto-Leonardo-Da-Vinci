@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Marcación Docente - Instituto Leonardo Da Vinci</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- FontAwesome -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Estilos -->
+    <link rel="stylesheet" href="../style/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- CABECERA -->
+      <header class="header">
+        <div class="header-icon">
+          <i class="fas fa-graduation-cap"></i>
+        </div>
+        <h1>Instituto Leonardo Da Vinci</h1>
+        <p class="header-subtitle">Sistema de Asistencia Docente</p>
+        <div class="reloj" id="reloj">
+          <i class="far fa-clock"></i>
+          <span id="relojTexto"></span>
+        </div>
+      </header>
+
+      <!-- TARJETA PRINCIPAL -->
+      <div class="card">
+        <!-- LOGIN -->
+        <section class="seccion">
+          <div class="section-header">
+            <i class="fas fa-id-card"></i>
+            <h2>Marcación de Entrada y Salida</h2>
+          </div>
+          <p class="descripcion">Ingrese su DNI para continuar</p>
+
+          <div class="input-group">
+            <i class="fas fa-fingerprint"></i>
+            <input
+              type="text"
+              id="dniInput"
+              placeholder="Ingrese su DNI"
+              maxlength="8"
+              oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+            />
+          </div>
+
+          <button class="btn-primary" onclick="verificarDNI()">
+            <i class="fas fa-sign-in-alt"></i>
+            Ingresar
+          </button>
+
+          <div id="mensaje" class="mensaje"></div>
+        </section>
+
+        <!-- PANEL DOCENTE -->
+        <section id="panelDocente" class="seccion hidden">
+          <div class="welcome-badge">
+            <i class="fas fa-user-tie"></i>
+            <h3 id="bienvenida"></h3>
+          </div>
+          <p id="fechaActual" class="fecha">
+            <i class="far fa-calendar-alt"></i>
+            <span id="fechaTexto"></span>
+          </p>
+
+          <div class="bloque">
+            <div class="bloque-header">
+              <i class="fas fa-book-open"></i>
+              <h4>Cursos programados para hoy</h4>
+            </div>
+            <ul id="listaCursos"></ul>
+          </div>
+
+          <div class="acciones">
+            <button
+              id="btnEntrada"
+              class="btn-success"
+              onclick="marcarEntrada()"
+            >
+              <i class="fas fa-sign-in-alt"></i>
+              Marcar Entrada
+            </button>
+            <button
+              id="btnSalida"
+              class="btn-danger hidden"
+              onclick="marcarSalida()"
+            >
+              <i class="fas fa-sign-out-alt"></i>
+              Marcar Salida
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- FOOTER -->
+      <footer class="footer">
+        <p><i class="fas fa-school"></i> Instituto Leonardo Da Vinci © 2026</p>
+        <p class="footer-sub">Sistema de Control de Asistencia Docente</p>
+      </footer>
+    </div>
+
+    <script src="../scripts/app.js"></script>
+  </body>
+</html>

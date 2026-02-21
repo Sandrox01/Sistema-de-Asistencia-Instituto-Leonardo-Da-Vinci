@@ -1,0 +1,1165 @@
+/* ========================================
+   SISTEMA DE ASISTENCIA DOCENTE
+   Instituto Leonardo Da Vinci
+   Diseño Profesional e Institucional
+   ======================================== */
+
+/* === VARIABLES CSS === */
+:root {
+    /* Paleta Institucional */
+    --primary-dark: #0f172a;
+    --primary-blue: #1e3a8a;
+    --primary-light: #3b82f6;
+    --accent-gold: #f59e0b;
+    --accent-gold-light: #fbbf24;
+    
+    /* Colores de Estado */
+    --success: #10b981;
+    --success-dark: #059669;
+    --danger: #ef4444;
+    --danger-dark: #dc2626;
+    --warning: #f59e0b;
+    --info: #3b82f6;
+    
+    /* Neutros */
+    --white: #ffffff;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    
+    /* Sombras */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    --shadow-glow: 0 0 40px rgba(59, 130, 246, 0.3);
+    
+    /* Bordes y Radios */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
+    --radius-full: 9999px;
+    
+    /* Transiciones */
+    --transition-fast: 150ms ease;
+    --transition-base: 250ms ease;
+    --transition-slow: 350ms ease;
+}
+
+/* === RESET === */
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* === BASE === */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-blue) 50%, #1e40af 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--gray-800);
+    line-height: 1.6;
+    padding: 20px;
+}
+
+/* Patrón de fondo decorativo */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+        radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(255, 255, 255, 0.05) 0%, transparent 30%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* === APP CONTAINER === */
+.app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* === HEADER === */
+.header {
+    text-align: center;
+    color: var(--white);
+    padding: 16px 0 8px;
+    animation: fadeInDown 0.6s ease-out;
+}
+
+.header-icon {
+    width: 84px;
+    height: 84px;
+    background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-light));
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 18px;
+    box-shadow: 0 8px 30px rgba(245, 158, 11, 0.4);
+    animation: pulse 2s infinite;
+}
+
+.header-icon i {
+    font-size: 36px;
+    color: var(--white);
+}
+
+.header h1 {
+    font-size: 1.9rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.header-subtitle {
+    font-size: 1rem;
+    font-weight: 400;
+    opacity: 0.95;
+    color: var(--gray-100);
+    letter-spacing: 0.02em;
+}
+
+.reloj {
+    margin-top: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
+    backdrop-filter: blur(12px);
+    padding: 12px 26px;
+    border-radius: 999px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.015em;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 18px 35px -18px rgba(15, 23, 42, 0.6);
+}
+
+.reloj i {
+    color: var(--accent-gold);
+    font-size: 1.1rem;
+}
+
+/* === CARD PRINCIPAL === */
+.card {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.98));
+    border-radius: var(--radius-2xl);
+    padding: 36px 34px 32px;
+    box-shadow: var(--shadow-2xl), var(--shadow-glow);
+    animation: fadeInUp 0.5s ease-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--primary-blue), var(--accent-gold), var(--primary-light));
+}
+
+.card::after {
+    content: '';
+    position: absolute;
+    inset: 10px;
+    border-radius: calc(var(--radius-2xl) - 12px);
+    pointer-events: none;
+    border: 1px solid rgba(15, 23, 42, 0.04);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* === SECCIONES === */
+.seccion {
+    margin-bottom: 20px;
+}
+
+.seccion:last-child {
+    margin-bottom: 0;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.section-header i {
+    color: var(--primary-blue);
+    font-size: 1.35rem;
+}
+
+.seccion h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--gray-800);
+    letter-spacing: -0.01em;
+}
+
+.descripcion {
+    font-size: 1rem;
+    color: var(--gray-500);
+    margin-bottom: 20px;
+    max-width: 360px;
+}
+
+/* === INPUT GROUP === */
+.input-group {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.input-group i {
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    font-size: 1.1rem;
+    transition: color var(--transition-base);
+}
+
+.input-group input {
+    width: 100%;
+    padding: 16px 16px 16px 54px;
+    border: 2px solid rgba(148, 163, 184, 0.35);
+    border-radius: var(--radius-lg);
+    font-size: 1.1rem;
+    font-family: inherit;
+    transition: all var(--transition-base);
+    background: var(--gray-50);
+    letter-spacing: 0.04em;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    background: var(--white);
+    box-shadow: 0 12px 32px -18px rgba(30, 64, 175, 0.55);
+}
+
+.input-group input:focus + i,
+.input-group:focus-within i {
+    color: var(--primary-blue);
+    transform: translateY(-50%) scale(1.08);
+}
+
+.input-group input::placeholder {
+    color: var(--gray-400);
+    letter-spacing: 0;
+}
+
+/* === BOTONES === */
+button, .btn-primary, .btn-success, .btn-danger {
+    width: 100%;
+    padding: 16px 22px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 1.05rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all var(--transition-base);
+}
+
+.btn-primary, button:not(.btn-success):not(.btn-danger):not(.borrar-historial):not(.btn-excel):not(.btn-volver) {
+    background: linear-gradient(135deg, var(--primary-blue), var(--primary-light));
+    color: var(--white);
+    box-shadow: 0 10px 24px -12px rgba(30, 64, 175, 0.55);
+}
+
+.btn-primary:hover, button:not(.btn-success):not(.btn-danger):not(.borrar-historial):not(.btn-excel):not(.btn-volver):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 32px -12px rgba(30, 64, 175, 0.55);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, var(--success-dark), var(--success));
+    color: var(--white);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, var(--danger-dark), var(--danger));
+    color: var(--white);
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* === WELCOME BADGE === */
+.welcome-badge {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(135deg, var(--primary-blue), var(--primary-light));
+    color: var(--white);
+    padding: 18px 22px;
+    border-radius: var(--radius-xl);
+    margin-bottom: 14px;
+    box-shadow: 0 16px 30px -18px rgba(30, 64, 175, 0.6);
+}
+
+.welcome-badge i {
+    font-size: 1.5rem;
+    opacity: 0.9;
+}
+
+.welcome-badge h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+/* === FECHA === */
+.fecha {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    color: var(--gray-600);
+    margin-bottom: 18px;
+}
+
+.fecha i {
+    color: var(--accent-gold);
+    font-size: 1rem;
+}
+
+/* === BLOQUE CURSOS === */
+.bloque {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.bloque-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.bloque-header i {
+    color: var(--primary-blue);
+}
+
+.bloque h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--gray-700);
+}
+
+/* === LISTA CURSOS === */
+#listaCursos {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#listaCursos li {
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: var(--white);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    color: var(--gray-700);
+    border-left: 3px solid var(--primary-light);
+    transition: all var(--transition-fast);
+}
+
+#listaCursos li:hover {
+    background: var(--gray-100);
+    transform: translateX(4px);
+}
+
+#listaCursos li:last-child {
+    margin-bottom: 0;
+}
+
+/* === ACCIONES === */
+.acciones {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* === MENSAJES === */
+.mensaje {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: var(--radius-lg);
+    font-size: 0.95rem;
+    background: rgba(15, 23, 42, 0.04);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    text-align: center;
+}
+
+.mensaje:empty {
+    display: none;
+}
+
+/* === FOOTER === */
+.footer {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    padding: 10px 0;
+}
+
+.footer i {
+    color: var(--accent-gold);
+    margin-right: 6px;
+}
+
+.footer-sub {
+    font-size: 0.75rem;
+    opacity: 0.6;
+    margin-top: 4px;
+}
+
+/* === OCULTAR === */
+.hidden {
+    display: none !important;
+}
+
+/* ========================================
+   PANEL ADMINISTRADOR
+   ======================================== */
+
+.admin-body {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-blue) 50%, #1e40af 100%);
+    min-height: 100vh;
+}
+.admin-container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 20px;
+}
+
+.admin-header {
+    text-align: center;
+    color: var(--white);
+    padding: 20px 0;
+    animation: fadeInDown 0.6s ease-out;
+}
+
+.admin-header-icon {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, var(--danger), var(--danger-dark));
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    box-shadow: 0 8px 30px rgba(239, 68, 68, 0.4);
+}
+
+.admin-header-icon i {
+    font-size: 36px;
+    color: var(--white);
+}
+
+.admin-header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+}
+
+.admin-subtitle {
+    font-size: 0.95rem;
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.admin-subtitle i {
+    color: var(--accent-gold);
+}
+
+.admin-content {
+    background: var(--white);
+    border-radius: var(--radius-2xl);
+    padding: 28px;
+    box-shadow: var(--shadow-2xl);
+    animation: fadeInUp 0.5s ease-out;
+}
+
+.admin-section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--gray-100);
+}
+
+.admin-section-header i {
+    font-size: 1.4rem;
+    color: var(--primary-blue);
+}
+
+.admin-section-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+/* === GRID DOCENTES === */
+.docentes-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.docente-card {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    transition: all var(--transition-base);
+    text-align: center;
+}
+
+.docente-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-light);
+}
+
+.docente-avatar {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, var(--primary-blue), var(--primary-light));
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.docente-avatar i {
+    font-size: 26px;
+    color: var(--white);
+}
+
+.docente-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.docente-nombre {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.docente-dni {
+    font-size: 0.85rem;
+    color: var(--gray-500);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.docente-dni i {
+    color: var(--accent-gold);
+}
+
+.btn-excel {
+    width: 100%;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all var(--transition-base);
+}
+
+.btn-excel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+}
+
+.btn-excel i {
+    font-size: 1rem;
+}
+
+/* === ADMIN ACTIONS === */
+.admin-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-200);
+}
+
+.borrar-historial {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, var(--danger-dark), var(--danger));
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all var(--transition-base);
+    width: auto;
+}
+
+.borrar-historial:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+}
+
+.btn-volver {
+    padding: 12px 24px;
+    background: var(--gray-600);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    transition: all var(--transition-base);
+}
+
+.btn-volver:hover {
+    background: var(--gray-700);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.admin-footer {
+    margin-top: auto;
+}
+
+/* Grid vacío */
+.docentes-grid:empty::after {
+    content: "No hay docentes registrados";
+    display: block;
+    text-align: center;
+    padding: 40px;
+    color: var(--gray-500);
+    font-size: 0.95rem;
+    grid-column: 1 / -1;
+}
+
+/* === ANIMACIONES === */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 480px) {
+    body {
+        padding: 12px;
+    }
+    
+    .app {
+        max-width: 100%;
+    }
+    
+    .card {
+        padding: 20px;
+        border-radius: var(--radius-xl);
+    }
+    
+    .header h1 {
+        font-size: 1.3rem;
+    }
+    
+    .header-icon {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .header-icon i {
+        font-size: 26px;
+    }
+    
+    .admin-container {
+        padding: 12px;
+    }
+    
+    .admin-content {
+        padding: 20px;
+    }
+    
+    .docentes-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .admin-actions {
+        flex-direction: column;
+    }
+    
+    .borrar-historial,
+    .btn-volver {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* === SWEETALERT2 CUSTOM === */
+.swal2-popup {
+    font-family: 'Inter', sans-serif !important;
+    border-radius: var(--radius-xl) !important;
+}
+
+.swal2-title {
+    font-weight: 600 !important;
+}
+
+.swal2-confirm {
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    border-radius: var(--radius-md) !important;
+}
+
+.swal2-cancel {
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    border-radius: var(--radius-md) !important;
+}
+
+
+/* ===== PANEL ADMINISTRATIVO ===== */
+
+.admin-container{
+  max-width:900px;
+  margin:auto;
+  padding:30px;
+}
+
+.admin-header{
+  text-align:center;
+  color:white;
+  margin-bottom:30px;
+}
+
+.admin-header i{
+  font-size:55px;
+  color:#ff3b3b;
+}
+
+.section-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:10px;
+}
+
+.search-input{
+  width:100%;
+  padding:8px;
+  margin-bottom:15px;
+  border-radius:6px;
+  border:1px solid #ccc;
+}
+
+.card{
+  background:white;
+  padding:20px;
+  border-radius:12px;
+  margin-bottom:25px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+th,td{
+  padding:10px;
+  border-bottom:1px solid #eee;
+}
+
+.btn-primary{
+  background:#2563eb;
+  color:white;
+  border:none;
+  padding:8px 14px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.btn-edit{
+  background:#3498db;
+  color:white;
+  border:none;
+  padding:6px 10px;
+  border-radius:5px;
+}
+
+.btn-delete{
+  background:#e74c3c;
+  color:white;
+  border:none;
+  padding:6px 10px;
+  border-radius:5px;
+}
+
+.btn-warning{
+  background:#f39c12;
+  color:white;
+  border:none;
+  padding:6px 12px;
+  border-radius:5px;
+}
+
+.btn-report{
+  background:#00b96b;
+  color:white;
+  border:none;
+  padding:6px 10px;
+  border-radius:5px;
+}
+
+.admin-actions{
+  display:flex;
+  justify-content:space-between;
+}
+
+.btn-danger{
+  background:#e74c3c;
+  color:white;
+  border:none;
+  padding:10px 16px;
+  border-radius:6px;
+}
+
+.btn-secondary{
+  background:#34495e;
+  color:white;
+  padding:10px 16px;
+  border-radius:6px;
+  text-decoration:none;
+}
+
+
+/* ===== BOTONES ACCIONES TABLA (FORZADO) ===== */
+
+.acciones-tabla{
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* reset SOLO para botones de tabla */
+.acciones-tabla button{
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  border-radius: 6px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  font-size: 15px;
+  background: none;
+}
+
+/* Editar */
+.acciones-tabla .btn-edit{
+  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
+}
+
+.acciones-tabla .btn-edit:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(59,130,246,0.4);
+}
+
+/* Borrar */
+.acciones-tabla .btn-delete{
+  background: linear-gradient(135deg, #dc2626, #ef4444) !important;
+}
+
+.acciones-tabla .btn-delete:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(239,68,68,0.45);
+}
+
+/* ===== BOTÓN NUEVO ===== */
+
+.btn-nuevo{
+  width: auto !important;
+  min-width: 200px;
+  padding: 14px 26px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+}
+
+/* ===== NAVEGACIÓN DE SECCIONES ===== */
+
+.nav-panel{
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.btn-nav{
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: #e5e7eb;
+  color: #1f2937;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-nav:hover{
+  background: #dbeafe;
+}
+
+.btn-nav.active{
+  background: #2563eb;
+  color: white;
+  box-shadow: 0 6px 15px rgba(37,99,235,0.35);
+}
+
+/* ===== SECCIONES ===== */
+
+.seccion-panel{
+  animation: fadeIn 0.25s ease;
+}
+
+.oculto{
+  display: none;
+}
+
+@keyframes fadeIn{
+  from{
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to{
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===================================================== */
+/* ===== AJUSTES SOLO PARA INDEX (no afecta admin) ===== */
+/* ===================================================== */
+
+.app .section-header {
+  justify-content: flex-start;
+  text-align: left;
+  gap: 10px;
+}
+
+.app .section-header h2 {
+  margin: 0;
+}
+
+/* Aumentar ligeramente tamaño general del index */
+.app {
+  max-width: 480px; 
+  transform: scale(1.08);   /* Aumenta 8% todo */
+  transform-origin: top center;
+}
+
+.app .card {
+  padding: 32px; /* antes 28px */
+}
+
+.header h1 {
+  font-size: 1.7rem;
+}
+
+.descripcion {
+  font-size: 1rem;
+}
+
+.app button {
+  font-size: 1.05rem;
+}
+
+
+/* ===================================================== */
+/* ===== MEJORA ESTÉTICA PANEL ADMIN ===== */
+/* ===================================================== */
+
+/* Botones de navegación superior */
+.btn-nav {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.25);
+  backdrop-filter: blur(6px);
+}
+
+.btn-nav:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+.btn-nav.active {
+  background: linear-gradient(135deg, var(--primary-light), var(--primary-blue));
+  border: none;
+}
+
+/* Contenedor acciones especiales */
+.acciones-especiales {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+
+/* Botones especiales */
+.btn-especial {
+  flex: 1;
+  min-width: 200px;
+  padding: 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: white;
+}    
+
+.btn-warning {
+  background: linear-gradient(135deg,#f59e0b,#fbbf24);
+}
+
+.btn-info {
+  background: linear-gradient(135deg,#2563eb,#3b82f6);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg,#dc2626,#ef4444);
+}
+
+.btn-especial:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+
+.btn-permiso{
+    background: linear-gradient(135deg,#e8eb25,#f3f63b);
+}
+
+
+

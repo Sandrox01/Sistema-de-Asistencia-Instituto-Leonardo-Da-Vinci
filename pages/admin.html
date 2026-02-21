@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Administrativo - Instituto Leonardo Da Vinci</title>
+
+<!-- FontAwesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- Estilos -->
+<link rel="stylesheet" href="../style/style.css">
+<link rel="stylesheet" href="../style/style-admin.css">
+
+</head>
+
+<body class="admin-body">
+
+<div class="admin-container">
+
+  <!-- ===== SIDEBAR FIJO ===== -->
+  <aside id="sidebarAdmin" class="sidebar-admin">
+
+    <div class="sidebar-content">
+      <div class="sidebar-brand">
+        <div class="brand-badge">
+          <i class="fa-solid fa-compass-drafting"></i>
+        </div>
+        <div class="brand-text">
+          <h2>Leonardo Da Vinci</h2>
+          <span>Panel Administrativo</span>
+        </div>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <p class="sidebar-section-title">Gestión Operativa</p>
+        <div class="sidebar-links">
+          <button class="btn-side active" data-seccion="docentes" onclick="irSeccion('docentes')">
+            <i class="fa-solid fa-chalkboard-user"></i> Docentes
+          </button>
+
+          <button class="btn-side" data-seccion="cursos" onclick="irSeccion('cursos')">
+            <i class="fa-solid fa-book"></i> Cursos
+          </button>
+
+          <button class="btn-side" data-seccion="periodos" onclick="irSeccion('periodos')">
+            <i class="fa-solid fa-calendar-days"></i> Periodos
+          </button>
+
+          <button class="btn-side" data-seccion="horarios" onclick="irSeccion('horarios')">
+            <i class="fa-solid fa-clock"></i> Horarios
+          </button>
+
+          <button class="btn-side" data-seccion="activaciones" onclick="irSeccion('activaciones')">
+            <i class="fa-solid fa-bolt"></i> Activaciones
+          </button>
+
+          <button class="btn-side" data-seccion="reportes" onclick="irSeccion('reportes')">
+            <i class="fa-solid fa-file-excel"></i> Reportes
+          </button>
+          <button class="btn-side" data-seccion="asistencia" onclick="irSeccion('asistencia')">
+            <i class="fa-solid fa-user-check"></i> Asistencia
+          </button>
+        </div>
+      </div>
+    </div>
+
+  <!-- BOTONES DE ABAJO -->
+  <div class="sidebar-bottom">
+    <button id="btnLimpiar" class="btn-borrar-historial" type="button">
+      <i class="fa-solid fa-broom"></i> Borrar Historial
+    </button>
+
+    <button class="btn-volver" type="button" onclick="window.location.href='index.html'">
+      <i class="fa-solid fa-arrow-left"></i> Volver al Sistema
+    </button>
+
+  </div>
+
+  </aside>
+
+  <div class="admin-main">
+    <header class="admin-header">
+      <div class="admin-header-info">
+        <div class="admin-header-icon">
+          <i class="fa-solid fa-user-shield"></i>
+        </div>
+        <div class="admin-header-text">
+          <h1>Panel Administrativo</h1>
+          <p>Instituto Leonardo Da Vinci</p>
+        </div>
+      </div>
+      <div class="admin-header-actions">
+        <button id="btnRefrescarTodo" class="btn-refresh-all" type="button">
+          <i class="fa-solid fa-rotate"></i> Actualizar datos
+        </button>
+        <button class="sidebar-toggle" type="button" aria-label="Abrir menú" onclick="toggleSidebar()">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="admin-sections">
+
+      <!-- ===== DOCENTES ===== -->
+      <section id="docentes" class="card seccion-panel">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-chalkboard-user"></i> Gestión de Docentes</h2>
+            <div class="section-actions">
+              <button id="toggleDocentes" class="btn-secondary" type="button">
+                <i class="fa-solid fa-eye"></i> Ver todos
+              </button>
+              <button class="btn-primary btn-nuevo" onclick="nuevoDocente()">
+                <i class="fa-solid fa-user-plus"></i> Nuevo Docente
+              </button>
+            </div>
+        </div>
+
+        <input class="search-input" id="buscarDocente" placeholder="Buscar docente por nombre o DNI...">
+
+        <table id="tablaDocentes">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>DNI</th>
+              <th style="width: 120px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="3" style="text-align:center; color:#888;">Cargando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ===== CURSOS ===== -->
+      <section id="cursos" class="card seccion-panel oculto">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-book"></i> Gestión de Cursos</h2>
+            <div class="section-actions">
+              <button id="toggleCursos" class="btn-secondary" type="button">
+                <i class="fa-solid fa-eye"></i> Ver todos
+              </button>
+              <button class="btn-primary btn-nuevo" onclick="nuevoCurso()">
+                <i class="fa-solid fa-plus"></i> Nuevo Curso
+              </button>
+            </div>
+        </div>
+
+        <input class="search-input" id="buscarCurso" placeholder="Buscar curso...">
+
+        <table id="tablaCursos">
+          <thead>
+            <tr>
+              <th>Curso</th>
+              <th style="width: 120px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="2" style="text-align:center; color:#888;">Cargando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ===== PERIODOS ===== -->
+      <section id="periodos" class="card seccion-panel oculto">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-calendar-days"></i> Gestión de Periodos</h2>
+            <div class="section-actions">
+              <button id="togglePeriodos" class="btn-secondary" type="button">
+                <i class="fa-solid fa-eye"></i> Ver todos
+              </button>
+              <button class="btn-primary btn-nuevo" onclick="nuevoPeriodo()">
+                <i class="fa-solid fa-plus"></i> Nuevo Periodo
+              </button>
+            </div>
+        </div>
+
+        <input class="search-input" id="buscarPeriodo" placeholder="Buscar periodo por nombre o fecha (dd/mm/aaaa)...">
+
+        <table id="tablaPeriodos">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Fecha inicio</th>
+              <th>Fecha fin</th>
+              <th style="width: 140px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="4" style="text-align:center; color:#888;">Cargando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ===== HORARIOS ===== -->
+      <section id="horarios" class="card seccion-panel oculto">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-clock"></i> Gestión de Horarios</h2>
+            <div class="section-actions">
+              <button id="toggleHorarios" class="btn-secondary" type="button">
+                <i class="fa-solid fa-eye"></i> Ver todos
+              </button>
+              <button class="btn-primary btn-nuevo" onclick="nuevoHorario()">
+                <i class="fa-solid fa-calendar-plus"></i> Nuevo Horario
+              </button>
+            </div>
+        </div>
+
+        <input class="search-input" id="buscarHorario" placeholder="Buscar por docente, curso o día...">
+
+        <table id="tablaHorarios">
+          <thead>
+            <tr>
+              <th>Docente</th>
+              <th>Curso</th>
+              <th>Día</th>
+              <th>Inicio</th>
+              <th>Fin</th>
+              <th style="width: 140px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="6" style="text-align:center; color:#888;">Cargando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ===== ACTIVACIONES ESPECIALES ===== -->
+      <section id="activaciones" class="card seccion-panel oculto">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-bolt"></i> Activaciones Especiales</h2>
+        </div>
+        
+        <p>
+          <i class="fa-solid fa-info-circle"></i> 
+          Aquí aparecerán los docentes bloqueados por tardanzas o salidas fuera de tolerancia. 
+          Puedes darles permisos especiales para que puedan marcar asistencia.
+        </p>
+
+        <div id="listaBloqueados" style="margin-top:15px;">
+          <p style="text-align:center; color:#888;">Cargando...</p>
+        </div>
+
+        <div class="activaciones-historial">
+          <div class="activaciones-header">
+            <h3><i class="fa-solid fa-list-check"></i> Permisos otorgados</h3>
+          </div>
+          <div id="listaActivaciones" class="activaciones-lista">
+            <p style="text-align:center; color:#888;">Cargando historial...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== REPORTES ===== -->
+      <section id="reportes" class="card seccion-panel oculto">
+        <div class="section-header">
+          <h2><i class="fa-solid fa-file-excel"></i> Reportes de Asistencia</h2>
+            <div class="section-actions">
+              <button id="toggleReportes" class="btn-secondary" type="button">
+                <i class="fa-solid fa-eye"></i> Ver todos
+              </button>
+            </div>
+        </div>
+
+        <p>
+          <i class="fa-solid fa-info-circle"></i> 
+          Descarga reportes detallados en Excel de las asistencias de cada docente.
+        </p>
+
+        <input class="search-input" id="buscarReporte" placeholder="Buscar docente por nombre o DNI...">
+
+        <table id="tablaReportes">
+          <thead>
+            <tr>
+              <th>Docente</th>
+              <th>DNI</th>
+              <th style="width: 180px;">Descargar</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="3" style="text-align:center; color:#888;">Cargando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ===== ASISTENCIA ===== -->
+      <section id="asistencia" class="card seccion-panel oculto asistencia-panel">
+        <div class="section-header asistencia-header">
+          <div class="section-title">
+            <h2><i class="fa-solid fa-user-check"></i> Gestión de Asistencias</h2>
+            <span class="section-subtitle">Controla la bitácora manual y mantén la información alineada con los reportes oficiales.</span>
+          </div>
+          <div class="section-actions asistencia-actions">
+              <button id="toggleAsistencias" class="btn-secondary" type="button">
+                <i class="fa-solid fa-eye"></i> Ver todos
+              </button>
+            <button id="btnNuevaAsistencia" class="btn-primary btn-nuevo btn-accent" type="button">
+              <i class="fa-solid fa-plus"></i> Añadir asistencia
+            </button>
+          </div>
+        </div>
+
+        <input class="search-input" id="buscarAsistencia" placeholder="Buscar asistencia por fecha, docente o curso...">
+
+        <div class="asistencia-highlights">
+          <div class="highlight-card total">
+            <span class="label">Registros visibles</span>
+            <strong id="chipTotalAsistencias">0</strong>
+          </div>
+          <div class="highlight-card tardanza">
+            <span class="label">Tardanzas</span>
+            <strong id="chipTardanzas">0</strong>
+          </div>
+          <div class="highlight-card recuperacion">
+            <span class="label">Sesiones de recuperación</span>
+            <strong id="chipRecuperaciones">0</strong>
+          </div>
+          <div class="highlight-card faltas">
+            <span class="label">Faltas</span>
+            <strong id="chipFaltas">0</strong>
+          </div>
+        </div>
+
+        <p class="section-help asistencia-help">
+          <i class="fa-solid fa-circle-info"></i>
+          Ajusta horarios registrados manualmente, desactiva entradas que no deban publicarse y elimina duplicados de forma segura.
+        </p>
+
+        <div class="table-shell asistencia-table">
+          <table id="tablaAsistencias">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Docente</th>
+              <th>Curso</th>
+              <th>Entrada</th>
+              <th>Salida</th>
+              <th>Estado</th>
+              <th>Observaciones</th>
+              <th style="width: 180px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="8" style="text-align:center; color:#888;">Cargando...</td>
+            </tr>
+          </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+</div>
+
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Script principal -->
+<script src="../scripts/admin-panel.js"></script>
+
+<script>
+  // ... funciones de asistencia definidas en admin-panel.js ...
+</script>
+
+</body>
+</html>
