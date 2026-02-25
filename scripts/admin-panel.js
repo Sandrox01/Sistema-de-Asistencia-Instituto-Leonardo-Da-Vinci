@@ -1,5 +1,5 @@
 /*********************************
- * ADMIN PANEL - GESTIÓN COMPLETA - VESRION FINALISIMA - SANDRO CARDENAS VILCA
+ * GESTIÓN COMPLETA - VESRION FINAL - SANDRO CARDENAS VILCA
  *********************************/
 
 let docentes = [];
