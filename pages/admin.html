@@ -40,7 +40,11 @@
       <div class="sidebar-section">
         <p class="sidebar-section-title">Gestión Operativa</p>
         <div class="sidebar-links">
-          <button class="btn-side active" data-seccion="docentes" onclick="irSeccion('docentes')">
+          <button class="btn-side active" data-seccion="inicio" onclick="irSeccion('inicio')">
+            <i class="fa-solid fa-gauge"></i> Inicio
+          </button>
+
+          <button class="btn-side" data-seccion="docentes" onclick="irSeccion('docentes')">
             <i class="fa-solid fa-chalkboard-user"></i> Docentes
           </button>
 
@@ -107,8 +111,129 @@
 
     <div class="admin-sections">
 
+      <!-- ===== INICIO / DASHBOARD ===== -->
+      <section id="inicio" class="card seccion-panel">
+        <div class="dashboard-hero">
+          <div class="hero-text">
+            <h2><i class="fa-solid fa-gauge"></i> Inicio</h2>
+            <p>Resumen general del Instituto Leonardo Da Vinci con los indicadores más relevantes.</p>
+          </div>
+          <div class="hero-actions">
+            <span class="hero-sync"><i class="fa-solid fa-clock-rotate-left"></i> Actualizado <span id="dashboardUltimaActualizacion">--</span></span>
+          </div>
+        </div>
+
+        <div class="dashboard-metrics">
+          <article class="dash-card metric-card">
+            <div class="metric-icon shadow-blue"><i class="fa-solid fa-chalkboard-user"></i></div>
+            <div>
+              <span class="label">Docentes activos</span>
+              <div class="metric-values">
+                <strong id="metricDocentesActivos">0</strong>
+                <span class="helper">de <span id="metricDocentesTotal">0</span> registrados</span>
+              </div>
+            </div>
+          </article>
+          <article class="dash-card metric-card">
+            <div class="metric-icon shadow-indigo"><i class="fa-solid fa-book"></i></div>
+            <div>
+              <span class="label">Cursos activos</span>
+              <div class="metric-values">
+                <strong id="metricCursosActivos">0</strong>
+                <span class="helper">de <span id="metricCursosTotal">0</span> publicados</span>
+              </div>
+            </div>
+          </article>
+          <article class="dash-card metric-card">
+            <div class="metric-icon shadow-green"><i class="fa-solid fa-calendar-days"></i></div>
+            <div>
+              <span class="label">Periodos vigentes</span>
+              <div class="metric-values">
+                <strong id="metricPeriodosVigentes">0</strong>
+                <span class="helper">de <span id="metricPeriodosTotal">0</span> configurados</span>
+              </div>
+            </div>
+          </article>
+          <article class="dash-card metric-card">
+            <div class="metric-icon shadow-orange"><i class="fa-solid fa-clock"></i></div>
+            <div>
+              <span class="label">Horarios activos</span>
+              <div class="metric-values">
+                <strong id="metricHorariosActivos">0</strong>
+                <span class="helper">de <span id="metricHorariosTotal">0</span> totales</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="dashboard-row">
+          <article class="dash-card attendance-card">
+            <div class="attendance-head">
+              <h3>Asistencias de hoy</h3>
+              <span class="pill pill-primary" id="metricCoberturaHoy">0%</span>
+            </div>
+            <div class="dashboard-gauge" id="dashboardAsisGauge">
+              <div class="gauge-center">
+                <strong id="metricAsistenciasHoy">0</strong>
+                <span>Marcaciones</span>
+              </div>
+            </div>
+            <div class="attendance-breakdown">
+              <div>
+                <span>Tardanzas</span>
+                <strong id="metricTardanzasHoy">0</strong>
+              </div>
+              <div>
+                <span>Faltas</span>
+                <strong id="metricFaltasHoy">0</strong>
+              </div>
+              <div>
+                <span>En curso</span>
+                <strong id="metricEnCursoHoy">0</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="dash-card alert-card">
+            <div class="alert-head">
+              <h3>Alertas recientes</h3>
+              <span>Últimas incidencias registradas</span>
+            </div>
+            <ul id="dashboardAlertList" class="alert-list">
+              <li class="empty-state">Sin incidencias recientes.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="dashboard-row full">
+          <article class="dash-card recent-card">
+            <div class="recent-head">
+              <h3>Actividad reciente</h3>
+              <span>Últimas 5 asistencias registradas</span>
+            </div>
+            <div class="table-shell mini">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Docente</th>
+                    <th>Curso</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboardRecientes">
+                  <tr>
+                    <td colspan="4" style="text-align:center; color:#888;">Sin movimientos registrados.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <!-- ===== DOCENTES ===== -->
-      <section id="docentes" class="card seccion-panel">
+      <section id="docentes" class="card seccion-panel oculto">
         <div class="section-header">
           <h2><i class="fa-solid fa-chalkboard-user"></i> Gestión de Docentes</h2>
             <div class="section-actions">
@@ -137,6 +262,7 @@
             </tr>
           </tbody>
         </table>
+        <div class="table-pagination" id="paginationDocentes"></div>
       </section>
 
       <!-- ===== CURSOS ===== -->
@@ -168,6 +294,7 @@
             </tr>
           </tbody>
         </table>
+        <div class="table-pagination" id="paginationCursos"></div>
       </section>
 
       <!-- ===== PERIODOS ===== -->
@@ -201,6 +328,7 @@
             </tr>
           </tbody>
         </table>
+        <div class="table-pagination" id="paginationPeriodos"></div>
       </section>
 
       <!-- ===== HORARIOS ===== -->
@@ -236,6 +364,7 @@
             </tr>
           </tbody>
         </table>
+        <div class="table-pagination" id="paginationHorarios"></div>
       </section>
 
       <!-- ===== ACTIVACIONES ESPECIALES ===== -->
@@ -296,6 +425,7 @@
             </tr>
           </tbody>
         </table>
+        <div class="table-pagination" id="paginationReportes"></div>
       </section>
 
       <!-- ===== ASISTENCIA ===== -->
@@ -318,19 +448,23 @@
         <input class="search-input" id="buscarAsistencia" placeholder="Buscar asistencia por fecha, docente o curso...">
 
         <div class="asistencia-highlights">
-          <div class="highlight-card total">
+          <div class="highlight-card total" onclick="aplicarFiltroChip('total')" style="cursor:pointer;" title="Ver todos">
             <span class="label">Registros visibles</span>
             <strong id="chipTotalAsistencias">0</strong>
           </div>
-          <div class="highlight-card tardanza">
+          <div class="highlight-card encurso" onclick="aplicarFiltroChip('encurso')" style="cursor:pointer;" title="Filtrar registros en curso">
+            <span class="label">En curso</span>
+            <strong id="chipEnCurso">0</strong>
+          </div>
+          <div class="highlight-card tardanza" onclick="aplicarFiltroChip('tardanza')" style="cursor:pointer;" title="Filtrar tardanzas">
             <span class="label">Tardanzas</span>
             <strong id="chipTardanzas">0</strong>
           </div>
-          <div class="highlight-card recuperacion">
+          <div class="highlight-card recuperacion" onclick="aplicarFiltroChip('recuperacion')" style="cursor:pointer;" title="Filtrar recuperaciones">
             <span class="label">Sesiones de recuperación</span>
             <strong id="chipRecuperaciones">0</strong>
           </div>
-          <div class="highlight-card faltas">
+          <div class="highlight-card faltas" onclick="aplicarFiltroChip('falta')" style="cursor:pointer;" title="Filtrar faltas">
             <span class="label">Faltas</span>
             <strong id="chipFaltas">0</strong>
           </div>
@@ -362,6 +496,7 @@
           </tbody>
           </table>
         </div>
+        <div class="table-pagination" id="paginationAsistencias"></div>
       </section>
 
     </div>

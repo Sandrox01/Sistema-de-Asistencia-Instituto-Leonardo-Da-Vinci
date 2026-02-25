@@ -1,5 +1,5 @@
 /*********************************
- * ADMIN PANEL - GESTIÓN COMPLETA
+ * ADMIN PANEL - GESTIÓN COMPLETA - VESRION FINALISIMA - SANDRO CARDENAS VILCA
  *********************************/
 
 let docentes = [];
@@ -111,10 +111,13 @@ async function solicitarAccesoAdmin() {
   return false;
 }
 
+let filtroDocentes = '';
+let filtroCursos = '';
 let filtroReportes = '';
 let filtroHorarios = '';
 let filtroPeriodos = '';
 let filtroAsistencias = '';
+let filtroChipAsistencias = ''; // 'tardanza' | 'recuperacion' | 'falta' | 'encurso' | ''
 
 const vistaCompleta = {
   docentes: false,
@@ -125,24 +128,203 @@ const vistaCompleta = {
   reportes: false,
 };
 
+const paginacionSecciones = {
+  docentes: { pagina: 1, tamano: 10 },
+  cursos: { pagina: 1, tamano: 10 },
+  periodos: { pagina: 1, tamano: 10 },
+  horarios: { pagina: 1, tamano: 10 },
+  reportes: { pagina: 1, tamano: 10 },
+  asistencias: { pagina: 1, tamano: 10 },
+};
+
+const renderizadoresPorSeccion = {
+  docentes: () => renderizarDocentes(),
+  cursos: () => renderizarCursos(),
+  periodos: () => renderizarPeriodos(),
+  horarios: () => renderizarHorarios(),
+  reportes: () => renderizarReportes(),
+  asistencias: () => renderizarAsistencias(),
+};
+
+const contenedoresPaginacion = {
+  docentes: 'paginationDocentes',
+  cursos: 'paginationCursos',
+  periodos: 'paginationPeriodos',
+  horarios: 'paginationHorarios',
+  reportes: 'paginationReportes',
+  asistencias: 'paginationAsistencias',
+};
+
+function obtenerEstadoPaginacion(seccion) {
+  if (!paginacionSecciones[seccion]) {
+    paginacionSecciones[seccion] = { pagina: 1, tamano: 10 };
+  }
+  return paginacionSecciones[seccion];
+}
+
+function resetearPaginacion(seccion) {
+  const estado = obtenerEstadoPaginacion(seccion);
+  estado.pagina = 1;
+}
+
+function paginarLista(lista = [], seccion) {
+  const estado = obtenerEstadoPaginacion(seccion);
+  const tamano = estado.tamano || 10;
+  const totalItems = Array.isArray(lista) ? lista.length : 0;
+  const totalPaginas = Math.max(1, Math.ceil(Math.max(totalItems, 1) / tamano));
+  const pagina = Math.min(Math.max(estado.pagina, 1), totalPaginas);
+  estado.pagina = pagina;
+  const inicio = totalItems ? (pagina - 1) * tamano : 0;
+  const items = totalItems ? lista.slice(inicio, inicio + tamano) : [];
+  return {
+    items,
+    meta: {
+      pagina,
+      totalPaginas,
+      totalItems,
+      tamano,
+      desde: totalItems ? inicio + 1 : 0,
+      hasta: totalItems ? Math.min(inicio + tamano, totalItems) : 0,
+    }
+  };
+}
+
+function obtenerMetaPaginacionVacia(seccion) {
+  const estado = obtenerEstadoPaginacion(seccion);
+  return {
+    pagina: 1,
+    totalPaginas: 1,
+    totalItems: 0,
+    tamano: estado.tamano || 10,
+    desde: 0,
+    hasta: 0,
+  };
+}
+
+function irAPagina(seccion, pagina) {
+  const estado = obtenerEstadoPaginacion(seccion);
+  estado.pagina = Math.max(1, Math.floor(pagina) || 1);
+  const render = renderizadoresPorSeccion[seccion];
+  if (typeof render === 'function') {
+    render();
+  }
+}
+
+function renderizarControlesPaginacion(seccion, meta) {
+  const contenedorId = contenedoresPaginacion[seccion];
+  if (!contenedorId) return;
+  const contenedor = document.getElementById(contenedorId);
+  if (!contenedor) return;
+
+  if (!meta || meta.totalItems <= meta.tamano) {
+    contenedor.innerHTML = '';
+    contenedor.style.display = 'none';
+    return;
+  }
+
+  contenedor.style.display = '';
+  const paginaActual = meta.pagina;
+  const totalPaginas = meta.totalPaginas;
+  const desde = meta.desde || 0;
+  const hasta = meta.hasta || 0;
+
+  contenedor.innerHTML = `
+    <div class="pagination-info">Mostrando ${desde}-${hasta} de ${meta.totalItems} registros</div>
+    <div class="pagination-controls">
+      <button type="button" class="pagination-btn" data-action="prev" ${paginaActual === 1 ? 'disabled' : ''} aria-label="Página anterior">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+      <span class="pagination-page">Página ${paginaActual} de ${totalPaginas}</span>
+      <button type="button" class="pagination-btn" data-action="next" ${paginaActual === totalPaginas ? 'disabled' : ''} aria-label="Página siguiente">
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
+      <div class="pagination-jump">
+        <label>Ir a</label>
+        <input type="number" min="1" max="${totalPaginas}" value="${paginaActual}" aria-label="Ir a la página en ${seccion}">
+        <button type="button" class="pagination-go" data-action="jump">Ir</button>
+      </div>
+    </div>
+  `;
+
+  const prevBtn = contenedor.querySelector('button[data-action="prev"]');
+  const nextBtn = contenedor.querySelector('button[data-action="next"]');
+  const jumpBtn = contenedor.querySelector('button[data-action="jump"]');
+  const jumpInput = contenedor.querySelector('input[type="number"]');
+
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => irAPagina(seccion, paginaActual - 1));
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => irAPagina(seccion, paginaActual + 1));
+  }
+  const intentarSalto = () => {
+    if (!jumpInput) return;
+    const destino = Number(jumpInput.value);
+    if (Number.isNaN(destino)) {
+      jumpInput.value = paginaActual;
+      return;
+    }
+    const paginaDestino = Math.floor(Math.min(Math.max(destino, 1), totalPaginas));
+    irAPagina(seccion, paginaDestino);
+  };
+  if (jumpBtn) {
+    jumpBtn.addEventListener('click', intentarSalto);
+  }
+  if (jumpInput) {
+    jumpInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        intentarSalto();
+      }
+    });
+  }
+}
+
 function actualizarMetricasAsistencias(lista = []) {
   const total = lista.length;
   const tardanzas = lista.filter((item) => Number(item.minutosNoTrabajados) > 0);
-  const minutosPerdidos = tardanzas.reduce((acc, item) => acc + Number(item.minutosNoTrabajados || 0), 0);
   const recuperaciones = lista.filter((item) => item.esRecuperacion).length;
   const faltas = lista.filter((item) => (item.estado || '').toUpperCase() === 'FALTA').length;
+  const enCurso = lista.filter((item) => esAsistenciaEnCurso(item)).length;
 
   const totalNodo = document.getElementById('chipTotalAsistencias');
   const tardanzaNodo = document.getElementById('chipTardanzas');
   const recuperacionNodo = document.getElementById('chipRecuperaciones');
   const faltasNodo = document.getElementById('chipFaltas');
+  const enCursoNodo = document.getElementById('chipEnCurso');
 
   if (totalNodo) totalNodo.textContent = total;
-  // Mostrar únicamente la cantidad de tardanzas (sin minutos)
   if (tardanzaNodo) tardanzaNodo.textContent = tardanzas.length || 0;
   if (recuperacionNodo) recuperacionNodo.textContent = recuperaciones;
   if (faltasNodo) faltasNodo.textContent = faltas;
+  if (enCursoNodo) enCursoNodo.textContent = enCurso;
+
+  // Marcar el chip activo visualmente
+  document.querySelectorAll('.highlight-card').forEach(card => card.classList.remove('chip-activo'));
+  if (filtroChipAsistencias) {
+    const mapa = {
+      tardanza: '.highlight-card.tardanza',
+      recuperacion: '.highlight-card.recuperacion',
+      falta: '.highlight-card.faltas',
+      encurso: '.highlight-card.encurso'
+    };
+    const sel = mapa[filtroChipAsistencias];
+    if (sel) document.querySelector(sel)?.classList.add('chip-activo');
+  }
 }
+
+function aplicarFiltroChip(tipo) {
+  if (tipo === 'total' || filtroChipAsistencias === tipo) {
+    filtroChipAsistencias = '';
+  } else {
+    filtroChipAsistencias = tipo;
+  }
+  resetearPaginacion('asistencias');
+  renderizarAsistencias();
+}
+
+
+
+
 
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
@@ -154,6 +336,187 @@ const HTML_ESCAPE_MAP = {
 
 function sanitizeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char] || char);
+}
+
+// Un registro está "en curso" si ya marcó entrada y todavía no registra salida.
+function esAsistenciaEnCurso(registro = {}) {
+  const estado = (registro.estado || '').toUpperCase();
+  if (estado === 'FALTA') return false;
+  const tieneEntrada = Boolean(registro.horaEntradaReal);
+  const tieneSalida = Boolean(registro.horaSalidaReal);
+  return tieneEntrada && !tieneSalida;
+}
+
+function contarActivos(lista, campo = 'activacion') {
+  return Array.isArray(lista)
+    ? lista.filter((item) => item && Number(item[campo]) !== 0).length
+    : 0;
+}
+
+function esPeriodoVigente(periodo = {}) {
+  if (Number(periodo.activacion) === 0) return false;
+  const hoy = toInputDateValue(new Date());
+  const inicio = toInputDateValue(periodo.fecha_inicio || periodo.fechaInicio);
+  const fin = toInputDateValue(periodo.fecha_fin || periodo.fechaFin);
+  const despuesDeInicio = !inicio || inicio <= hoy;
+  const antesDeFin = !fin || fin >= hoy;
+  return despuesDeInicio && antesDeFin;
+}
+
+function ordenarAsistenciasDesc(lista = []) {
+  return [...lista].sort((a, b) => {
+    const fechaA = a.fecha ? new Date(a.fecha).getTime() : 0;
+    const fechaB = b.fecha ? new Date(b.fecha).getTime() : 0;
+    if (fechaB !== fechaA) return fechaB - fechaA;
+    const horaA = a.horaEntradaReal || a.horaEntradaProg || '';
+    const horaB = b.horaEntradaReal || b.horaEntradaProg || '';
+    if (horaB !== horaA) return horaB.localeCompare(horaA);
+    return (a.docente || '').localeCompare(b.docente || '');
+  });
+}
+
+function setDashboardText(id, valor) {
+  const nodo = document.getElementById(id);
+  if (nodo) nodo.textContent = valor;
+}
+
+function eliminarBotonActualizarPanel() {
+  const heroActions = document.querySelector('.dashboard-hero .hero-actions');
+  if (!heroActions) return;
+  const boton = Array.from(heroActions.querySelectorAll('button')).find((btn) =>
+    (btn.textContent || '').toLowerCase().includes('actualizar panel')
+  );
+  if (boton) {
+    boton.remove();
+  }
+}
+
+function actualizarDashboardInicio() {
+  // Totales base
+  const docentesActivos = contarActivos(docentes);
+  setDashboardText('metricDocentesActivos', docentesActivos);
+  setDashboardText('metricDocentesTotal', docentes.length || 0);
+
+  const cursosActivos = contarActivos(cursos);
+  setDashboardText('metricCursosActivos', cursosActivos);
+  setDashboardText('metricCursosTotal', cursos.length || 0);
+
+  const periodosVigentes = Array.isArray(periodos) ? periodos.filter(esPeriodoVigente).length : 0;
+  setDashboardText('metricPeriodosVigentes', periodosVigentes);
+  setDashboardText('metricPeriodosTotal', periodos.length || 0);
+
+  const horariosActivos = contarActivos(horarios);
+  setDashboardText('metricHorariosActivos', horariosActivos);
+  setDashboardText('metricHorariosTotal', horarios.length || 0);
+
+  // Asistencias del día
+  const hoyIso = toInputDateValue(new Date());
+  const asistenciasHoy = Array.isArray(asistencias)
+    ? asistencias.filter((r) => toInputDateValue(r.fecha) === hoyIso)
+    : [];
+  const tardanzasHoy = asistenciasHoy.filter((r) => Number(r.minutosNoTrabajados) > 0);
+  const faltasHoy = asistenciasHoy.filter((r) => (r.estado || '').toUpperCase() === 'FALTA');
+  const enCursoHoy = asistenciasHoy.filter((r) => esAsistenciaEnCurso(r));
+
+  setDashboardText('metricAsistenciasHoy', asistenciasHoy.length || 0);
+  setDashboardText('metricTardanzasHoy', tardanzasHoy.length || 0);
+  setDashboardText('metricFaltasHoy', faltasHoy.length || 0);
+  setDashboardText('metricEnCursoHoy', enCursoHoy.length || 0);
+
+  const cobertura = docentesActivos > 0 ? Math.min(100, Math.round((asistenciasHoy.length / docentesActivos) * 100)) : 0;
+  setDashboardText('metricCoberturaHoy', `${cobertura}%`);
+  const gauge = document.getElementById('dashboardAsisGauge');
+  if (gauge) gauge.style.setProperty('--avance', `${cobertura}%`);
+
+  // Alertas recientes
+  const alertList = document.getElementById('dashboardAlertList');
+  if (alertList) {
+    const incidencias = Array.isArray(asistencias)
+      ? ordenarAsistenciasDesc(asistencias)
+          .filter((r) => Number(r.minutosNoTrabajados) > 0 || (r.estado || '').toUpperCase() === 'FALTA')
+          .slice(0, 4)
+      : [];
+
+    if (!incidencias.length) {
+      alertList.innerHTML = '<li class="empty-state">Sin incidencias recientes.</li>';
+    } else {
+      alertList.innerHTML = incidencias.map((registro) => {
+        const tipo = (registro.estado || '').toUpperCase() === 'FALTA' ? 'Falta' : 'Tardanza';
+        const pillClass = tipo === 'Falta' ? 'pill-danger' : 'pill-warning';
+        return `
+          <li>
+            <div>
+              <strong>${sanitizeHtml(registro.docente || 'Sin docente')}</strong>
+              <span>${sanitizeHtml(registro.curso || 'Sin curso')}</span>
+            </div>
+            <div class="alert-meta">
+              <span class="pill ${pillClass}">${tipo}</span>
+              <span class="time">${formatearFechaBonita(registro.fecha)}</span>
+            </div>
+          </li>
+        `;
+      }).join('');
+    }
+  }
+
+  // Actividad reciente
+  const tbody = document.getElementById('dashboardRecientes');
+  if (tbody) {
+    const recientes = Array.isArray(asistencias)
+      ? ordenarAsistenciasDesc(asistencias).slice(0, 5)
+      : [];
+    if (!recientes.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">Sin movimientos registrados.</td></tr>';
+    } else {
+      tbody.innerHTML = recientes.map((registro) => {
+        const estado = sanitizeHtml(registro.estado || 'N/D');
+        return `
+          <tr>
+            <td>${formatearFechaBonita(registro.fecha)}</td>
+            <td>${sanitizeHtml(registro.docente || 'Sin docente')}</td>
+            <td>${sanitizeHtml(registro.curso || 'Sin curso')}</td>
+            <td>${estado}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  const ultima = document.getElementById('dashboardUltimaActualizacion');
+  if (ultima) ultima.textContent = formatearFechaHoraLocal(new Date());
+}
+
+/*********************************
+ * HELPERS AM/PM PARA HORARIOS
+ *********************************/
+function sincronizarBotonesAMPM(inputId) {
+  const input = document.getElementById(inputId);
+  const btnAM = document.getElementById(inputId + '-am');
+  const btnPM = document.getElementById(inputId + '-pm');
+  if (!btnAM || !btnPM) return;
+  // Si no hay valor, AM por defecto
+  if (!input || !input.value) {
+    btnAM.classList.add('active');
+    btnPM.classList.remove('active');
+    return;
+  }
+  const h = parseInt(input.value.split(':')[0], 10);
+  const esPM = !isNaN(h) && h >= 12;
+  btnAM.classList.toggle('active', !esPM);
+  btnPM.classList.toggle('active', esPM);
+}
+
+function setAMPM(inputId, periodo) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const partes = (input.value || '').split(':');
+  if (partes.length < 2) return;
+  let h = parseInt(partes[0], 10);
+  if (isNaN(h)) return;
+  if (periodo === 'PM' && h < 12) h += 12;
+  if (periodo === 'AM' && h >= 12) h -= 12;
+  input.value = `${String(h).padStart(2, '0')}:${partes[1]}`;
+  sincronizarBotonesAMPM(inputId);
 }
 
 function formatearFechaBonita(valor) {
@@ -231,7 +594,10 @@ function obtenerValorToggle(toggleId) {
 function toInputDateValue(valor) {
   if (!valor) return '';
   if (valor instanceof Date) {
-    return valor.toISOString().slice(0, 10);
+    const year = valor.getFullYear();
+    const month = String(valor.getMonth() + 1).padStart(2, '0');
+    const day = String(valor.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   const str = valor.toString();
   if (str.includes('T')) {
@@ -308,6 +674,7 @@ function construirFilaPreview(reporte) {
  * INICIALIZACIÓN
  *********************************/
 window.addEventListener('load', async () => {
+  eliminarBotonActualizarPanel();
   let accesoPermitido = false;
   try {
     accesoPermitido = await solicitarAccesoAdmin();
@@ -316,10 +683,12 @@ window.addEventListener('load', async () => {
       return;
     }
     await ejecutarCargaTotal();
+    actualizarDashboardInicio();
   } catch (err) {
     console.error('Error inicializando panel:', err);
   }
   inicializarEventListeners();
+  mostrarSeccion('inicio');
   if (accesoPermitido) {
     inicializarActualizacionesEnTiempoReal();
   }
@@ -420,6 +789,7 @@ function programarRefrescoAutomatico(force = false) {
     autoRefreshTimer = null;
     try {
       await ejecutarCargaTotal();
+      actualizarDashboardInicio();
     } catch (err) {
       console.error('Error actualizando datos automáticamente:', err);
     } finally {
@@ -479,13 +849,9 @@ function inicializarEventListeners() {
   const buscarDocente = document.getElementById('buscarDocente');
   if (buscarDocente) {
     buscarDocente.addEventListener('input', (e) => {
-      const filtro = e.target.value.toLowerCase();
-      const filas = document.querySelectorAll('#tablaDocentes tbody tr');
-      
-      filas.forEach(fila => {
-        const texto = fila.textContent.toLowerCase();
-        fila.style.display = texto.includes(filtro) ? '' : 'none';
-      });
+      filtroDocentes = e.target.value;
+      resetearPaginacion('docentes');
+      renderizarDocentes();
     });
   }
 
@@ -493,13 +859,9 @@ function inicializarEventListeners() {
   const buscarCurso = document.getElementById('buscarCurso');
   if (buscarCurso) {
     buscarCurso.addEventListener('input', (e) => {
-      const filtro = e.target.value.toLowerCase();
-      const filas = document.querySelectorAll('#tablaCursos tbody tr');
-      
-      filas.forEach(fila => {
-        const texto = fila.textContent.toLowerCase();
-        fila.style.display = texto.includes(filtro) ? '' : 'none';
-      });
+      filtroCursos = e.target.value;
+      resetearPaginacion('cursos');
+      renderizarCursos();
     });
   }
 
@@ -507,6 +869,7 @@ function inicializarEventListeners() {
   if (buscarHorario) {
     buscarHorario.addEventListener('input', (e) => {
       filtroHorarios = e.target.value;
+      resetearPaginacion('horarios');
       renderizarHorarios();
     });
   }
@@ -515,6 +878,7 @@ function inicializarEventListeners() {
   if (buscarPeriodo) {
     buscarPeriodo.addEventListener('input', (e) => {
       filtroPeriodos = e.target.value;
+      resetearPaginacion('periodos');
       renderizarPeriodos();
     });
   }
@@ -523,6 +887,7 @@ function inicializarEventListeners() {
   if (buscarReporte) {
     buscarReporte.addEventListener('input', (e) => {
       filtroReportes = e.target.value;
+      resetearPaginacion('reportes');
       renderizarReportes();
     });
   }
@@ -531,6 +896,7 @@ function inicializarEventListeners() {
   if (buscarAsistencia) {
     buscarAsistencia.addEventListener('input', (e) => {
       filtroAsistencias = e.target.value;
+      resetearPaginacion('asistencias');
       renderizarAsistencias();
     });
   }
@@ -658,13 +1024,25 @@ function renderizarDocentes() {
   
   tbody.innerHTML = '';
   const base = vistaCompleta.docentes ? docentes : docentes.filter((doc) => Number(doc.activacion) !== 0);
+  const filtro = normalizarTexto(filtroDocentes);
+  const lista = filtro
+    ? base.filter((doc) => {
+        const nombre = normalizarTexto(doc.nombre);
+        const dni = normalizarTexto(doc.dni);
+        return nombre.includes(filtro) || dni.includes(filtro);
+      })
+    : base;
 
-  if (base.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">No hay docentes activos en esta vista</td></tr>';
+  if (!lista.length) {
+    const mensaje = base.length === 0
+      ? 'No hay docentes activos en esta vista'
+      : 'Sin coincidencias según la búsqueda.';
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#888;">${mensaje}</td></tr>`;
+    renderizarControlesPaginacion('docentes', obtenerMetaPaginacionVacia('docentes'));
     return;
   }
 
-  const ordenados = [...base].sort((a, b) => {
+  const ordenados = [...lista].sort((a, b) => {
     const aActivo = Number(a.activacion) !== 0;
     const bActivo = Number(b.activacion) !== 0;
     if (aActivo === bActivo) {
@@ -673,27 +1051,29 @@ function renderizarDocentes() {
     return aActivo ? -1 : 1;
   });
 
-  ordenados.forEach(doc => {
-    const tr = document.createElement('tr');
-    if (Number(doc.activacion) === 0) {
-      tr.classList.add('is-inactive');
-    }
-    tr.innerHTML = `
-      <td>${doc.nombre}</td>
-      <td>${doc.dni}</td>
-      <td>
-        <div class="btn-actions">
-          <button class="btn-small btn-edit" onclick="editarDocente('${doc.dni}', '${doc.nombre.replace(/'/g, "\\'")}', ${Number(doc.activacion)})">
-            <i class="fa-solid fa-pen"></i>
-          </button>
-          <button class="btn-small btn-delete" onclick="eliminarDocente('${doc.dni}', '${doc.nombre.replace(/'/g, "\\'")}')">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      </td>
+  const { items, meta } = paginarLista(ordenados, 'docentes');
+  tbody.innerHTML = items.map((doc) => {
+    const extraClase = Number(doc.activacion) === 0 ? 'class="is-inactive"' : '';
+    return `
+      <tr ${extraClase}>
+        <td>${doc.nombre}</td>
+        <td>${doc.dni}</td>
+        <td>
+          <div class="btn-actions">
+            <button class="btn-small btn-edit" onclick="editarDocente('${doc.dni}', '${doc.nombre.replace(/'/g, "\\'")}', ${Number(doc.activacion)})">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button class="btn-small btn-delete" onclick="eliminarDocente('${doc.dni}', '${doc.nombre.replace(/'/g, "\\'")}')">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  }).join('');
+
+  renderizarControlesPaginacion('docentes', meta);
+  actualizarDashboardInicio();
 }
 
 async function nuevoDocente() {
@@ -908,6 +1288,7 @@ function renderizarPeriodos() {
 
   if (base.length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">No hay periodos activos en esta vista</td></tr>';
+    renderizarControlesPaginacion('periodos', obtenerMetaPaginacionVacia('periodos'));
     return;
   }
 
@@ -931,6 +1312,7 @@ function renderizarPeriodos() {
 
   if (lista.length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">Sin coincidencias según la búsqueda.</td></tr>';
+    renderizarControlesPaginacion('periodos', obtenerMetaPaginacionVacia('periodos'));
     return;
   }
 
@@ -943,32 +1325,34 @@ function renderizarPeriodos() {
     return aActivo ? -1 : 1;
   });
 
-  ordenados.forEach((p) => {
+  const { items, meta } = paginarLista(ordenados, 'periodos');
+  tbody.innerHTML = items.map((p) => {
     const fechaInicioSimple = formatearFechaSimple(p.fecha_inicio);
     const fechaFinSimple = formatearFechaSimple(p.fecha_fin);
     const fechaInicioLabel = convertirIsoALatam(fechaInicioSimple);
     const fechaFinLabel = convertirIsoALatam(fechaFinSimple);
-    const tr = document.createElement('tr');
-    if (Number(p.activacion) === 0) {
-      tr.classList.add('is-inactive');
-    }
-    tr.innerHTML = `
-      <td>${p.nombre}</td>
-      <td>${fechaInicioLabel}</td>
-      <td>${fechaFinLabel}</td>
-      <td>
-        <div class="btn-actions">
-          <button class="btn-small btn-edit" onclick="editarPeriodo(${p.id_periodo}, '${p.nombre.replace(/'/g, "\\'")}', '${fechaInicioSimple}', '${fechaFinSimple}', ${Number(p.activacion)})">
-            <i class="fa-solid fa-pen"></i>
-          </button>
-          <button class="btn-small btn-delete" onclick="eliminarPeriodo(${p.id_periodo}, '${p.nombre.replace(/'/g, "\\'")}')">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      </td>
+    const extraClase = Number(p.activacion) === 0 ? 'class="is-inactive"' : '';
+    return `
+      <tr ${extraClase}>
+        <td>${p.nombre}</td>
+        <td>${fechaInicioLabel}</td>
+        <td>${fechaFinLabel}</td>
+        <td>
+          <div class="btn-actions">
+            <button class="btn-small btn-edit" onclick="editarPeriodo(${p.id_periodo}, '${p.nombre.replace(/'/g, "\\'")}', '${fechaInicioSimple}', '${fechaFinSimple}', ${Number(p.activacion)})">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button class="btn-small btn-delete" onclick="eliminarPeriodo(${p.id_periodo}, '${p.nombre.replace(/'/g, "\\'")}')">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  }).join('');
+
+  renderizarControlesPaginacion('periodos', meta);
+  actualizarDashboardInicio();
 }
 
 function formatearFechaSimple(valor) {
@@ -1167,12 +1551,21 @@ function renderizarCursos() {
   
   const base = vistaCompleta.cursos ? cursos : cursos.filter((curso) => Number(curso.activacion) !== 0);
 
-  if (base.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="2" style="text-align:center; color:#888;">No hay cursos activos en esta vista</td></tr>';
+  const filtro = normalizarTexto(filtroCursos);
+  const lista = filtro
+    ? base.filter((curso) => normalizarTexto(curso.nombre).includes(filtro))
+    : base;
+
+  if (!lista.length) {
+    const mensaje = base.length === 0
+      ? 'No hay cursos activos en esta vista'
+      : 'Sin coincidencias según la búsqueda.';
+    tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#888;">${mensaje}</td></tr>`;
+    renderizarControlesPaginacion('cursos', obtenerMetaPaginacionVacia('cursos'));
     return;
   }
   
-  const ordenados = [...base].sort((a, b) => {
+  const ordenados = [...lista].sort((a, b) => {
     const aActivo = Number(a.activacion) !== 0;
     const bActivo = Number(b.activacion) !== 0;
     if (aActivo === bActivo) {
@@ -1181,26 +1574,28 @@ function renderizarCursos() {
     return aActivo ? -1 : 1;
   });
 
-  ordenados.forEach(curso => {
-    const tr = document.createElement('tr');
-    if (Number(curso.activacion) === 0) {
-      tr.classList.add('is-inactive');
-    }
-    tr.innerHTML = `
-      <td>${curso.nombre}</td>
-      <td>
-        <div class="btn-actions">
-          <button class="btn-small btn-edit" onclick="editarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}', ${Number(curso.activacion)})">
-            <i class="fa-solid fa-pen"></i>
-          </button>
-          <button class="btn-small btn-delete" onclick="eliminarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}')">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      </td>
+  const { items, meta } = paginarLista(ordenados, 'cursos');
+  tbody.innerHTML = items.map((curso) => {
+    const extraClase = Number(curso.activacion) === 0 ? 'class="is-inactive"' : '';
+    return `
+      <tr ${extraClase}>
+        <td>${curso.nombre}</td>
+        <td>
+          <div class="btn-actions">
+            <button class="btn-small btn-edit" onclick="editarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}', ${Number(curso.activacion)})">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button class="btn-small btn-delete" onclick="eliminarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}")">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  }).join('');
+
+  renderizarControlesPaginacion('cursos', meta);
+  actualizarDashboardInicio();
 }
 
 async function nuevoCurso() {
@@ -1364,6 +1759,7 @@ function renderizarHorarios() {
 
   if (base.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888;">No hay horarios activos en esta vista</td></tr>';
+    renderizarControlesPaginacion('horarios', obtenerMetaPaginacionVacia('horarios'));
     return;
   }
 
@@ -1379,6 +1775,7 @@ function renderizarHorarios() {
 
   if (lista.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888;">Sin coincidencias para la búsqueda.</td></tr>';
+    renderizarControlesPaginacion('horarios', obtenerMetaPaginacionVacia('horarios'));
     return;
   }
 
@@ -1394,52 +1791,54 @@ function renderizarHorarios() {
     return aActivo ? -1 : 1;
   });
 
-  ordenados.forEach(h => {
-    const tr = document.createElement('tr');
+  const { items, meta } = paginarLista(ordenados, 'horarios');
+  tbody.innerHTML = items.map((h) => {
     const registroInactivo = Number(h.activacion) === 0 || Number(h.activacion_docente) === 0 || Number(h.activacion_curso) === 0;
-    if (registroInactivo) {
-      tr.classList.add('is-inactive');
-    }
-    tr.innerHTML = `
-      <td>${h.docente}</td>
-      <td>
-        <span>${h.curso}</span>
-        ${h.es_recuperacion
-          ? '<span class="badge-recuperacion" title="Clase de recuperación">RECUPERACIÓN</span>'
-          : ''}
-      </td>
-      <td>${h.dia}</td>
-      <td>${h.hora_inicio}</td>
-      <td>${h.hora_fin}</td>
-      <td>
-        <div class="btn-actions">
-          <button class="btn-small btn-edit" onclick="editarHorario(
-            ${h.id_horario},
-            ${h.id_docente},
-            ${h.id_curso},
-            '${h.dia}',
-            '${h.hora_inicio.slice(0,5)}',
-            '${h.hora_fin.slice(0,5)}',
-            ${h.id_periodo || 0},
-            ${h.es_recuperacion ? 1 : 0},
-            ${Number(h.activacion)}
-          )">
-            <i class="fa-solid fa-pen"></i>
-          </button>
+    const extraClase = registroInactivo ? 'class="is-inactive"' : '';
+    return `
+      <tr ${extraClase}>
+        <td>${h.docente}</td>
+        <td>
+          <span>${h.curso}</span>
+          ${h.es_recuperacion
+            ? '<span class="badge-recuperacion" title="Clase de recuperación">RECUPERACIÓN</span>'
+            : ''}
+        </td>
+        <td>${h.dia}</td>
+        <td>${h.hora_inicio}</td>
+        <td>${h.hora_fin}</td>
+        <td>
+          <div class="btn-actions">
+            <button class="btn-small btn-edit" onclick="editarHorario(
+              ${h.id_horario},
+              ${h.id_docente},
+              ${h.id_curso},
+              '${h.dia}',
+              '${h.hora_inicio.slice(0,5)}',
+              '${h.hora_fin.slice(0,5)}',
+              ${h.id_periodo || 0},
+              ${h.es_recuperacion ? 1 : 0},
+              ${Number(h.activacion)}
+            )">
+              <i class="fa-solid fa-pen"></i>
+            </button>
 
-          <button class="btn-small btn-delete" onclick="eliminarHorario(
-            ${h.id_horario},
-            '${h.docente.replace(/'/g, "\\'")}',
-            '${h.curso.replace(/'/g, "\\'")}',
-            '${h.dia}'
-          )">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      </td>
+            <button class="btn-small btn-delete" onclick="eliminarHorario(
+              ${h.id_horario},
+              '${h.docente.replace(/'/g, "\\'")}',
+              '${h.curso.replace(/'/g, "\\'")}',
+              '${h.dia}'
+            )">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  }).join('');
+
+  renderizarControlesPaginacion('horarios', meta);
+  actualizarDashboardInicio();
 }
 
 
@@ -1521,11 +1920,19 @@ async function nuevoHorario() {
           <div class="form-field form-half">
             <label>Hora inicio *</label>
             <input id="swal-inicio" type="time">
+            <div class="ampm-toggle-row">
+              <button type="button" class="ampm-btn ampm-am" id="swal-inicio-am" onclick="setAMPM('swal-inicio','AM')">AM</button>
+              <button type="button" class="ampm-btn ampm-pm" id="swal-inicio-pm" onclick="setAMPM('swal-inicio','PM')">PM</button>
+            </div>
           </div>
 
           <div class="form-field form-half">
             <label>Hora fin *</label>
             <input id="swal-fin" type="time">
+            <div class="ampm-toggle-row">
+              <button type="button" class="ampm-btn ampm-am" id="swal-fin-am" onclick="setAMPM('swal-fin','AM')">AM</button>
+              <button type="button" class="ampm-btn ampm-pm" id="swal-fin-pm" onclick="setAMPM('swal-fin','PM')">PM</button>
+            </div>
           </div>
 
           <div class="form-field">
@@ -1546,6 +1953,15 @@ async function nuevoHorario() {
         </div>
       </div>
     `,
+    didOpen: () => {
+      // Sincronizar botones AM/PM al cambiar hora manualmente
+      ['swal-inicio', 'swal-fin'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('change', () => sincronizarBotonesAMPM(id));
+        sincronizarBotonesAMPM(id);
+      });
+    },
     preConfirm: () => {
       const popup = Swal.getPopup();
       const id_docente = Number(popup.querySelector('#swal-docente').value);
@@ -1701,10 +2117,18 @@ async function editarHorario(
           <div class="form-field form-half">
             <label>Hora inicio *</label>
             <input id="swal-inicio" type="time" value="${hora_inicio_actual}">
+            <div class="ampm-toggle-row">
+              <button type="button" class="ampm-btn ampm-am" id="swal-inicio-am" onclick="setAMPM('swal-inicio','AM')">AM</button>
+              <button type="button" class="ampm-btn ampm-pm" id="swal-inicio-pm" onclick="setAMPM('swal-inicio','PM')">PM</button>
+            </div>
           </div>
           <div class="form-field form-half">
             <label>Hora fin *</label>
             <input id="swal-fin" type="time" value="${hora_fin_actual}">
+            <div class="ampm-toggle-row">
+              <button type="button" class="ampm-btn ampm-am" id="swal-fin-am" onclick="setAMPM('swal-fin','AM')">AM</button>
+              <button type="button" class="ampm-btn ampm-pm" id="swal-fin-pm" onclick="setAMPM('swal-fin','PM')">PM</button>
+            </div>
           </div>
 
           <div class="form-field">
@@ -1739,6 +2163,13 @@ async function editarHorario(
       document.getElementById('swal-periodo').value = id_periodo_actual || '';
       document.getElementById('swal-es-recuperacion').checked = !!es_recuperacion_actual;
       sincronizarToggleModal('swal-horario-activo');
+      // Inicializar botones AM/PM según la hora cargada
+      ['swal-inicio', 'swal-fin'].forEach(id => {
+        const input = document.getElementById(id);
+        if (!input) return;
+        input.addEventListener('change', () => sincronizarBotonesAMPM(id));
+        sincronizarBotonesAMPM(id);
+      });
     },
     preConfirm: () => {
       const id_docente = Number(document.getElementById('swal-docente').value);
@@ -2007,6 +2438,7 @@ function renderizarReportes() {
 
   if (base.length === 0) {
     tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">No hay docentes activos para reportes</td></tr>';
+    renderizarControlesPaginacion('reportes', obtenerMetaPaginacionVacia('reportes'));
     return;
   }
 
@@ -2021,6 +2453,7 @@ function renderizarReportes() {
 
   if (lista.length === 0) {
     tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">No se encontraron docentes para la búsqueda.</td></tr>';
+    renderizarControlesPaginacion('reportes', obtenerMetaPaginacionVacia('reportes'));
     return;
   }
 
@@ -2033,22 +2466,23 @@ function renderizarReportes() {
     return aActivo ? -1 : 1;
   });
 
-  ordenados.forEach(doc => {
-    const tr = document.createElement('tr');
-    if (Number(doc.activacion) === 0) {
-      tr.classList.add('is-inactive');
-    }
-    tr.innerHTML = `
-      <td>${doc.nombre}</td>
-      <td>${doc.dni}</td>
-      <td style="text-align:center;">
-        <button class="btn-success btn-excel" onclick="mostrarPreviewReporte('${doc.dni}', '${doc.nombre.replace(/'/g, "\\'")}')">
-          <i class="fa-solid fa-eye"></i> Vista previa
-        </button>
-      </td>
+  const { items, meta } = paginarLista(ordenados, 'reportes');
+  tbody.innerHTML = items.map((doc) => {
+    const extraClase = Number(doc.activacion) === 0 ? 'class="is-inactive"' : '';
+    return `
+      <tr ${extraClase}>
+        <td>${doc.nombre}</td>
+        <td>${doc.dni}</td>
+        <td style="text-align:center;">
+          <button class="btn-success btn-excel" onclick="mostrarPreviewReporte('${doc.dni}', '${doc.nombre.replace(/'/g, "\\'")}')">
+            <i class="fa-solid fa-eye"></i> Vista previa
+          </button>
+        </td>
+      </tr>
     `;
-    tbody.appendChild(tr);
-  });
+  }).join('');
+
+  renderizarControlesPaginacion('reportes', meta);
 }
 
 function descargarReporteExcel(dni) {
@@ -2184,6 +2618,7 @@ async function cargarAsistencias() {
     asistencias = [];
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#e11d48;">${sanitizeHtml(err.message || 'Error al cargar las asistencias')}</td></tr>`;
     actualizarMetricasAsistencias([]);
+    actualizarDashboardInicio();
     throw err;
   }
 }
@@ -2218,6 +2653,17 @@ function renderizarAsistencias() {
     });
   }
 
+  // Aplicar filtro de chip (tardanzas, recuperaciones, faltas)
+  if (filtroChipAsistencias === 'tardanza') {
+    lista = lista.filter((r) => Number(r.minutosNoTrabajados) > 0);
+  } else if (filtroChipAsistencias === 'recuperacion') {
+    lista = lista.filter((r) => r.esRecuperacion);
+  } else if (filtroChipAsistencias === 'falta') {
+    lista = lista.filter((r) => (r.estado || '').toUpperCase() === 'FALTA');
+  } else if (filtroChipAsistencias === 'encurso') {
+    lista = lista.filter((r) => esAsistenciaEnCurso(r));
+  }
+
   lista.sort((a, b) => {
     const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
     const fb = b.fecha ? new Date(b.fecha).getTime() : 0;
@@ -2228,12 +2674,15 @@ function renderizarAsistencias() {
     return (a.docente || '').localeCompare(b.docente || '');
   });
 
+  actualizarMetricasAsistencias(lista);
+
   if (!lista.length) {
     const mensaje = base.length === 0
       ? 'No hay asistencias activas en esta vista.'
       : 'No se encontraron asistencias que coincidan con la búsqueda.';
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#888;">${mensaje}</td></tr>`;
-    actualizarMetricasAsistencias([]);
+    renderizarControlesPaginacion('asistencias', obtenerMetaPaginacionVacia('asistencias'));
+    actualizarDashboardInicio();
     return;
   }
 
@@ -2252,7 +2701,9 @@ function renderizarAsistencias() {
     return aActivo ? -1 : 1;
   });
 
-  const filas = ordenados.map((registro) => {
+  const { items, meta } = paginarLista(ordenados, 'asistencias');
+
+  const filas = items.map((registro) => {
     const estadoTexto = sanitizeHtml(registro.estado || 'N/D');
     const estadoUpper = estadoTexto.toUpperCase();
     let badgeClass = 'success';
@@ -2324,7 +2775,8 @@ function renderizarAsistencias() {
   }).join('');
 
   tbody.innerHTML = filas;
-  actualizarMetricasAsistencias(lista);
+  renderizarControlesPaginacion('asistencias', meta);
+  actualizarDashboardInicio();
 }
 
 function generarOpcionesDocentes(seleccionado) {
@@ -2399,6 +2851,7 @@ async function refrescarTodo() {
 
   try {
     await ejecutarCargaTotal();
+    actualizarDashboardInicio();
     Swal.fire({
       toast: true,
       position: 'top-end',

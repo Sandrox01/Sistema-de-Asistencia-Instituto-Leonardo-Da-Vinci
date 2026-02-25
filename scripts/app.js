@@ -1,5 +1,5 @@
 /*********************************
- * CONFIGURACIÓN GENERAL
+ * CONFIGURACIÓN GENERAL - VESRION FINALISIMA - SANDRO CARDENAS VILCA
  *********************************/
 
 const TOLERANCIA_ENTRADA_MIN = 10;

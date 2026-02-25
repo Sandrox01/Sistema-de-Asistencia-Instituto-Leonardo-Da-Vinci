@@ -24,89 +24,570 @@
 
     <!-- Estilos -->
     <link rel="stylesheet" href="../style/style.css" />
+
+    <!-- Fuente adicional más elegante para títulos -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+
+    <style>
+      /* ============================================
+         LAYOUT DE PANTALLA COMPLETA - DOS COLUMNAS
+         ============================================ */
+
+      body {
+        padding: 0;
+        overflow: hidden;
+        height: 100vh;
+        align-items: stretch;
+      }
+
+      .app {
+        width: 100%;
+        max-width: 100%;
+        height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        grid-template-columns: 1fr;
+        gap: 0;
+        transform: none !important;
+        padding: 0;
+      }
+
+      /* ── HEADER ── */
+      .header {
+        padding: 11px 36px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        text-align: left;
+        animation: none;
+        background: rgba(0, 0, 0, 0.22);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        flex-shrink: 0;
+      }
+
+      .header-icon {
+        width: 50px;
+        height: 50px;
+        min-width: 50px;
+        margin: 0;
+        animation: pulse 2s infinite;
+        box-shadow: 0 0 20px rgba(245,158,11,0.5);
+      }
+
+      .header-icon i { font-size: 22px; }
+
+      .header-titles { flex: 1; }
+
+      .header h1 {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 1px;
+        letter-spacing: -0.01em;
+      }
+
+      .header-subtitle {
+        font-size: 0.75rem;
+        margin: 0;
+        opacity: 0.8;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .reloj {
+        margin-top: 0;
+        padding: 9px 20px;
+        font-size: 0.9rem;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 500;
+        background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06));
+        border: 1px solid rgba(255,255,255,0.18);
+      }
+
+      /* ── ÁREA PRINCIPAL ── */
+      .main-area {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      /* Separador central con gradiente */
+      .main-area::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 10%;
+        bottom: 10%;
+        width: 1px;
+        background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.18) 30%, rgba(255,255,255,0.18) 70%, transparent);
+        pointer-events: none;
+      }
+
+      .panel-izquierdo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px 30px;
+        position: relative;
+      }
+
+      .panel-derecho {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 28px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* ── ESTADO VACÍO ── */
+      .panel-derecho-vacio {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        color: rgba(255, 255, 255, 0.22);
+        text-align: center;
+        animation: fadeIn 0.5s ease;
+      }
+
+      .panel-derecho-vacio .vacio-icono-wrap {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        border: 2px dashed rgba(255,255,255,0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .panel-derecho-vacio i {
+        font-size: 44px;
+        opacity: 0.5;
+      }
+
+      .panel-derecho-vacio p {
+        font-size: 0.92rem;
+        max-width: 200px;
+        line-height: 1.6;
+        font-style: italic;
+      }
+
+      /* ── CARD LOGIN ── */
+      .card-login {
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 44px 42px 40px;
+        width: 100%;
+        max-width: 460px;
+        box-shadow:
+          0 32px 64px -16px rgba(0,0,0,0.45),
+          0 0 0 1px rgba(255,255,255,0.08),
+          0 0 60px rgba(59,130,246,0.18);
+        position: relative;
+        overflow: hidden;
+        animation: fadeInUp 0.5s ease-out;
+      }
+
+      /* Barra superior tricolor */
+      .card-login::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 5px;
+        background: linear-gradient(90deg, #1e3a8a 0%, #f59e0b 50%, #3b82f6 100%);
+      }
+
+      /* Decoración de fondo sutil */
+      .card-login::after {
+        content: '';
+        position: absolute;
+        bottom: -60px;
+        right: -60px;
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%);
+        pointer-events: none;
+      }
+
+      /* Ícono decorativo grande dentro del card */
+      .login-icon-grande {
+        width: 72px;
+        height: 72px;
+        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 22px;
+        box-shadow: 0 12px 28px -6px rgba(30,58,138,0.5);
+      }
+
+      .login-icon-grande i {
+        font-size: 30px;
+        color: white;
+      }
+
+      .card-login .section-header {
+        margin-bottom: 6px;
+        justify-content: center;
+        text-align: center;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .card-login .section-header i {
+        display: none; /* reemplazado por el ícono grande */
+      }
+
+      .card-login .section-header h2 {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #0f172a;
+        letter-spacing: -0.02em;
+        text-align: center;
+      }
+
+      .card-login .descripcion {
+        margin-bottom: 28px;
+        font-size: 0.92rem;
+        color: #64748b;
+        text-align: center;
+      }
+
+      /* Label del input */
+      .input-label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 8px;
+      }
+
+      .card-login .input-group {
+        margin-bottom: 20px;
+      }
+
+      .card-login .input-group input {
+        padding: 16px 16px 16px 54px;
+        font-size: 1.15rem;
+        font-family: 'Outfit', monospace;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        border: 2px solid #e2e8f0;
+        background: #f8fafc;
+        border-radius: 14px;
+        transition: all 0.25s ease;
+        color: #0f172a;
+      }
+
+      .card-login .input-group input:focus {
+        border-color: #3b82f6;
+        background: #ffffff;
+        box-shadow: 0 0 0 4px rgba(59,130,246,0.12), 0 8px 20px -8px rgba(30,64,175,0.25);
+      }
+
+      .card-login .input-group i {
+        font-size: 1.15rem;
+        color: #94a3b8;
+      }
+
+      .card-login .input-group input:focus ~ i,
+      .card-login .input-group:focus-within i {
+        color: #3b82f6;
+      }
+
+      .card-login .btn-primary {
+        padding: 17px 24px;
+        font-size: 1.05rem;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 600;
+        border-radius: 14px;
+        letter-spacing: 0.02em;
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #3b82f6 100%);
+        box-shadow: 0 8px 24px -6px rgba(30,58,138,0.55);
+        transition: all 0.25s ease;
+      }
+
+      .card-login .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 14px 32px -8px rgba(30,58,138,0.6);
+      }
+
+      /* ── CARD DOCENTE ── */
+      .card-docente {
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 30px 28px;
+        width: 100%;
+        max-width: 500px;
+        max-height: calc(100vh - 150px);
+        overflow-y: auto;
+        box-shadow:
+          0 32px 64px -16px rgba(0,0,0,0.45),
+          0 0 0 1px rgba(255,255,255,0.08),
+          0 0 60px rgba(16,185,129,0.15);
+        position: relative;
+        animation: slideInRight 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
+      }
+
+      .card-docente::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 5px;
+        background: linear-gradient(90deg, #059669 0%, #f59e0b 50%, #3b82f6 100%);
+      }
+
+      .card-docente::-webkit-scrollbar { width: 4px; }
+      .card-docente::-webkit-scrollbar-track { background: transparent; }
+      .card-docente::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+      .card-docente .welcome-badge {
+        padding: 18px 22px;
+        margin-bottom: 16px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #1e3a8a, #2563eb);
+        box-shadow: 0 10px 24px -6px rgba(30,58,138,0.5);
+      }
+
+      .card-docente .welcome-badge i {
+        font-size: 1.8rem;
+      }
+
+      .card-docente .welcome-badge h3 {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.2rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        line-height: 1.3;
+      }
+
+      .card-docente .fecha {
+        margin-bottom: 16px;
+        font-size: 1rem;
+        font-weight: 500;
+        color: #475569;
+      }
+
+      .card-docente .bloque {
+        padding: 16px;
+        margin-bottom: 16px;
+        border-radius: 14px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+      }
+
+      .card-docente .bloque-header h4 {
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
+        font-size: 1rem;
+        color: #1e293b;
+      }
+
+      .card-docente .bloque-header i {
+        font-size: 1.1rem;
+      }
+
+      .card-docente #listaCursos li {
+        padding: 11px 14px;
+        font-size: 0.97rem;
+        font-weight: 500;
+        margin-bottom: 8px;
+        border-radius: 10px;
+        background: #ffffff;
+        border-left: 4px solid #3b82f6;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+        color: #1e293b;
+        line-height: 1.5;
+      }
+
+      .card-docente .acciones { gap: 12px; }
+
+      .card-docente .btn-success {
+        padding: 17px 22px;
+        font-size: 1.08rem;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
+        border-radius: 14px;
+        letter-spacing: 0.02em;
+        background: linear-gradient(135deg, #059669, #10b981);
+        box-shadow: 0 8px 22px -4px rgba(5,150,105,0.55);
+      }
+
+      .card-docente .btn-danger {
+        padding: 17px 22px;
+        font-size: 1.08rem;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
+        border-radius: 14px;
+        letter-spacing: 0.02em;
+        box-shadow: 0 8px 22px -4px rgba(220,38,38,0.5);
+      }
+
+      /* Ocultar card original */
+      .card { display: none !important; }
+
+      /* ── FOOTER ── */
+      .footer {
+        padding: 9px 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 24px;
+        font-size: 0.72rem;
+        background: rgba(0,0,0,0.2);
+        backdrop-filter: blur(12px);
+        border-top: 1px solid rgba(255,255,255,0.07);
+        flex-shrink: 0;
+        color: rgba(255,255,255,0.6);
+      }
+
+      .footer p { margin: 0; }
+      .footer-sub { font-size: 0.72rem; opacity: 0.45; margin-top: 0 !important; }
+
+      /* ── ANIMACIONES ── */
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(40px) scale(0.96); }
+        to   { opacity: 1; transform: translateX(0) scale(1); }
+      }
+
+      /* ── RESPONSIVE ── */
+      @media (max-width: 860px) {
+        body { overflow: auto; }
+        .app { height: auto; min-height: 100vh; }
+        .main-area { grid-template-columns: 1fr; height: auto; }
+        .panel-izquierdo, .panel-derecho {
+          padding: 24px 20px;
+          border-right: none;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .card-docente { max-height: none; }
+        .header { flex-wrap: wrap; padding: 12px 16px; }
+        .card-login { max-width: 100%; padding: 32px 28px; }
+      }
+    </style>
   </head>
   <body>
     <div class="app">
-      <!-- CABECERA -->
+      <!-- CABECERA COMPACTA HORIZONTAL -->
       <header class="header">
         <div class="header-icon">
           <i class="fas fa-graduation-cap"></i>
         </div>
-        <h1>Instituto Leonardo Da Vinci</h1>
-        <p class="header-subtitle">Sistema de Asistencia Docente</p>
+        <div class="header-titles">
+          <h1>Instituto Leonardo Da Vinci</h1>
+          <p class="header-subtitle">Sistema de Asistencia Docente</p>
+        </div>
         <div class="reloj" id="reloj">
           <i class="far fa-clock"></i>
           <span id="relojTexto"></span>
         </div>
       </header>
 
-      <!-- TARJETA PRINCIPAL -->
-      <div class="card">
-        <!-- LOGIN -->
-        <section class="seccion">
-          <div class="section-header">
-            <i class="fas fa-id-card"></i>
-            <h2>Marcación de Entrada y Salida</h2>
-          </div>
-          <p class="descripcion">Ingrese su DNI para continuar</p>
+      <!-- ÁREA PRINCIPAL: DOS COLUMNAS -->
+      <div class="main-area">
 
-          <div class="input-group">
-            <i class="fas fa-fingerprint"></i>
-            <input
-              type="text"
-              id="dniInput"
-              placeholder="Ingrese su DNI"
-              maxlength="8"
-              oninput="this.value = this.value.replace(/[^0-9]/g, '')"
-            />
-          </div>
-
-          <button class="btn-primary" onclick="verificarDNI()">
-            <i class="fas fa-sign-in-alt"></i>
-            Ingresar
-          </button>
-
-          <div id="mensaje" class="mensaje"></div>
-        </section>
-
-        <!-- PANEL DOCENTE -->
-        <section id="panelDocente" class="seccion hidden">
-          <div class="welcome-badge">
-            <i class="fas fa-user-tie"></i>
-            <h3 id="bienvenida"></h3>
-          </div>
-          <p id="fechaActual" class="fecha">
-            <i class="far fa-calendar-alt"></i>
-            <span id="fechaTexto"></span>
-          </p>
-
-          <div class="bloque">
-            <div class="bloque-header">
-              <i class="fas fa-book-open"></i>
-              <h4>Cursos programados para hoy</h4>
+        <!-- COLUMNA IZQUIERDA: LOGIN -->
+        <div class="panel-izquierdo">
+          <div class="card-login">
+            <div class="login-icon-grande">
+              <i class="fas fa-id-card"></i>
             </div>
-            <ul id="listaCursos"></ul>
+            <div class="section-header">
+              <i class="fas fa-id-card"></i>
+              <h2>Marcación de Entrada y Salida</h2>
+            </div>
+            <p class="descripcion">Ingrese su DNI para continuar</p>
+            <label class="input-label" for="dniInput">
+              <i class="fas fa-fingerprint" style="margin-right:5px;color:#f59e0b;"></i>Número de DNI
+            </label>
+            <div class="input-group">
+              <i class="fas fa-fingerprint"></i>
+              <input
+                type="text"
+                id="dniInput"
+                placeholder="Ej: 48970090"
+                maxlength="8"
+                oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                onkeydown="if(event.key==='Enter') verificarDNI()"
+              />
+            </div>
+            <button class="btn-primary" onclick="verificarDNI()">
+              <i class="fas fa-sign-in-alt"></i>
+              Ingresar al Sistema
+            </button>
+            <div id="mensaje" class="mensaje"></div>
+          </div>
+        </div>
+
+        <!-- COLUMNA DERECHA: PANEL DOCENTE -->
+        <div class="panel-derecho" id="panelDerecho">
+          <!-- Estado vacío mientras no hay docente -->
+          <div class="panel-derecho-vacio" id="estadoVacio">
+            <div class="vacio-icono-wrap">
+              <i class="fas fa-user-clock"></i>
+            </div>
+            <p>Ingrese su DNI para ver la información de sus cursos y marcar asistencia</p>
           </div>
 
-          <div class="acciones">
-            <button
-              id="btnEntrada"
-              class="btn-success"
-              onclick="marcarEntrada()"
-            >
-              <i class="fas fa-sign-in-alt"></i>
-              Marcar Entrada
-            </button>
-            <button
-              id="btnSalida"
-              class="btn-danger hidden"
-              onclick="marcarSalida()"
-            >
-              <i class="fas fa-sign-out-alt"></i>
-              Marcar Salida
-            </button>
-          </div>
-        </section>
+          <!-- Panel docente (hidden por defecto) -->
+          <section id="panelDocente" class="card-docente hidden">
+            <div class="welcome-badge">
+              <i class="fas fa-user-tie"></i>
+              <h3 id="bienvenida"></h3>
+            </div>
+            <p id="fechaActual" class="fecha">
+              <i class="far fa-calendar-alt"></i>
+              <span id="fechaTexto"></span>
+            </p>
+
+            <div class="bloque">
+              <div class="bloque-header">
+                <i class="fas fa-book-open"></i>
+                <h4>Cursos programados para hoy</h4>
+              </div>
+              <ul id="listaCursos"></ul>
+            </div>
+
+            <div class="acciones">
+              <button
+                id="btnEntrada"
+                class="btn-success"
+                onclick="marcarEntrada()"
+              >
+                <i class="fas fa-sign-in-alt"></i>
+                Marcar Entrada
+              </button>
+              <button
+                id="btnSalida"
+                class="btn-danger hidden"
+                onclick="marcarSalida()"
+              >
+                <i class="fas fa-sign-out-alt"></i>
+                Marcar Salida
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- CARD ORIGINAL OCULTA (mantiene compatibilidad con app.js que busca #panelDocente) -->
+      <div class="card" aria-hidden="true">
+        <section class="seccion"></section>
       </div>
 
       <!-- FOOTER -->
@@ -117,5 +598,20 @@
     </div>
 
     <script src="../scripts/app.js"></script>
+    <script>
+      // Mostrar/ocultar estado vacío cuando se muestra el panel docente
+      const panelDocente = document.getElementById('panelDocente');
+      const estadoVacio = document.getElementById('estadoVacio');
+
+      const observer = new MutationObserver(() => {
+        if (panelDocente.classList.contains('hidden')) {
+          estadoVacio.style.display = '';
+        } else {
+          estadoVacio.style.display = 'none';
+        }
+      });
+
+      observer.observe(panelDocente, { attributes: true, attributeFilter: ['class'] });
+    </script>
   </body>
 </html>
