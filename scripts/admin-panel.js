@@ -281,7 +281,7 @@ function renderizarControlesPaginacion(seccion, meta) {
 
 function actualizarMetricasAsistencias(lista = []) {
   const total = lista.length;
-  const tardanzas = lista.filter((item) => Number(item.minutosNoTrabajados) > 0);
+  const tardanzas = lista.filter((item) => esTardanzaVisible(item));
   const recuperaciones = lista.filter((item) => item.esRecuperacion).length;
   const faltas = lista.filter((item) => (item.estado || '').toUpperCase() === 'FALTA').length;
   const enCurso = lista.filter((item) => esAsistenciaEnCurso(item)).length;
@@ -322,6 +322,38 @@ function aplicarFiltroChip(tipo) {
   renderizarAsistencias();
 }
 
+function configurarResaltadoDashboard() {
+  const attendanceCard = document.querySelector('.attendance-card');
+  if (!attendanceCard) return;
+
+  const segmentos = ['tardanza', 'faltas', 'encurso', 'realizados'];
+  const breakdownCards = attendanceCard.querySelectorAll('.attendance-breakdown .breakdown-card[data-segment]');
+  if (!breakdownCards.length) return;
+
+  const limpiarResaltado = () => {
+    segmentos.forEach((segmento) => attendanceCard.classList.remove(`segment-highlight-${segmento}`));
+    breakdownCards.forEach((card) => card.classList.remove('is-highlighted'));
+  };
+
+  const activarResaltado = (segmento, card) => {
+    limpiarResaltado();
+    if (!segmento || !card) return;
+    attendanceCard.classList.add(`segment-highlight-${segmento}`);
+    card.classList.add('is-highlighted');
+  };
+
+  breakdownCards.forEach((card) => {
+    const segmento = card.getAttribute('data-segment');
+    if (!segmento) return;
+    card.addEventListener('mouseenter', () => activarResaltado(segmento, card));
+    card.addEventListener('focus', () => activarResaltado(segmento, card));
+    card.addEventListener('mouseleave', limpiarResaltado);
+    card.addEventListener('blur', limpiarResaltado);
+  });
+
+  attendanceCard.addEventListener('mouseleave', limpiarResaltado);
+}
+
 
 
 
@@ -345,6 +377,13 @@ function esAsistenciaEnCurso(registro = {}) {
   const tieneEntrada = Boolean(registro.horaEntradaReal);
   const tieneSalida = Boolean(registro.horaSalidaReal);
   return tieneEntrada && !tieneSalida;
+}
+
+function esTardanzaVisible(registro = {}) {
+  if (!registro) return false;
+  const estado = (registro.estado || '').toUpperCase();
+  if (estado === 'FALTA') return false;
+  return Number(registro.minutosNoTrabajados) > 0;
 }
 
 function contarActivos(lista, campo = 'activacion') {
@@ -414,19 +453,52 @@ function actualizarDashboardInicio() {
   const asistenciasHoy = Array.isArray(asistencias)
     ? asistencias.filter((r) => toInputDateValue(r.fecha) === hoyIso)
     : [];
-  const tardanzasHoy = asistenciasHoy.filter((r) => Number(r.minutosNoTrabajados) > 0);
+  const tardanzasHoy = asistenciasHoy.filter((r) => esTardanzaVisible(r));
   const faltasHoy = asistenciasHoy.filter((r) => (r.estado || '').toUpperCase() === 'FALTA');
   const enCursoHoy = asistenciasHoy.filter((r) => esAsistenciaEnCurso(r));
+  const realizadosHoy = asistenciasHoy.filter((registro) => {
+    const esTardanza = esTardanzaVisible(registro);
+    const esFalta = (registro.estado || '').toUpperCase() === 'FALTA';
+    const estaEnCurso = esAsistenciaEnCurso(registro);
+    return !esTardanza && !esFalta && !estaEnCurso;
+  }).length;
 
   setDashboardText('metricAsistenciasHoy', asistenciasHoy.length || 0);
   setDashboardText('metricTardanzasHoy', tardanzasHoy.length || 0);
   setDashboardText('metricFaltasHoy', faltasHoy.length || 0);
   setDashboardText('metricEnCursoHoy', enCursoHoy.length || 0);
+  setDashboardText('metricRealizadosHoy', realizadosHoy || 0);
 
   const cobertura = docentesActivos > 0 ? Math.min(100, Math.round((asistenciasHoy.length / docentesActivos) * 100)) : 0;
   setDashboardText('metricCoberturaHoy', `${cobertura}%`);
   const gauge = document.getElementById('dashboardAsisGauge');
-  if (gauge) gauge.style.setProperty('--avance', `${cobertura}%`);
+  if (gauge) {
+    const totalEstadosHoy = tardanzasHoy.length + faltasHoy.length + enCursoHoy.length + realizadosHoy;
+    const obtenerPorcentaje = (valor) => (totalEstadosHoy > 0 ? (valor / totalEstadosHoy) * 100 : 0);
+    const normalizar = (valor) => {
+      if (!Number.isFinite(valor)) return 0;
+      return Math.max(0, Math.min(100, Number(valor.toFixed(2))));
+    };
+
+    const acumuladoRealizados = obtenerPorcentaje(realizadosHoy);
+    const acumuladoTardanza = acumuladoRealizados + obtenerPorcentaje(tardanzasHoy.length);
+    const acumuladoFalta = acumuladoTardanza + obtenerPorcentaje(faltasHoy.length);
+    let acumuladoEnCurso = acumuladoFalta + obtenerPorcentaje(enCursoHoy.length);
+
+    const segRealizados = normalizar(acumuladoRealizados);
+    const segTardanza = normalizar(acumuladoTardanza);
+    const segFalta = normalizar(acumuladoFalta);
+    let segEnCurso = normalizar(acumuladoEnCurso);
+    if (totalEstadosHoy > 0 && segEnCurso < 100) {
+      segEnCurso = 100;
+    }
+
+    gauge.style.setProperty('--avance', `${cobertura}%`);
+    gauge.style.setProperty('--segment-realizados', `${segRealizados}%`);
+    gauge.style.setProperty('--segment-tardanza', `${segTardanza}%`);
+    gauge.style.setProperty('--segment-falta', `${segFalta}%`);
+    gauge.style.setProperty('--segment-encurso', `${segEnCurso}%`);
+  }
 
   // Alertas recientes
   const alertList = document.getElementById('dashboardAlertList');
@@ -463,7 +535,7 @@ function actualizarDashboardInicio() {
   const tbody = document.getElementById('dashboardRecientes');
   if (tbody) {
     const recientes = Array.isArray(asistencias)
-      ? ordenarAsistenciasDesc(asistencias).slice(0, 5)
+      ? ordenarAsistenciasDesc(asistencias).slice(0, 7)
       : [];
     if (!recientes.length) {
       tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888;">Sin movimientos registrados.</td></tr>';
@@ -2655,7 +2727,7 @@ function renderizarAsistencias() {
 
   // Aplicar filtro de chip (tardanzas, recuperaciones, faltas)
   if (filtroChipAsistencias === 'tardanza') {
-    lista = lista.filter((r) => Number(r.minutosNoTrabajados) > 0);
+    lista = lista.filter((r) => esTardanzaVisible(r));
   } else if (filtroChipAsistencias === 'recuperacion') {
     lista = lista.filter((r) => r.esRecuperacion);
   } else if (filtroChipAsistencias === 'falta') {
@@ -3194,3 +3266,5 @@ function irSeccion(id) {
   // cerrar sidebar en móviles
   toggleSidebar();
 }
+
+configurarResaltadoDashboard();

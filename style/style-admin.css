@@ -437,6 +437,19 @@ table tr.is-inactive td:first-child {
   display: flex !important;
   flex-direction: column !important;
   gap: 16px !important;
+  --color-realizados: #22c55e;
+  --color-tardanza: #fbbf24;
+  --color-faltas: #ef4444;
+  --color-encurso: #0ea5e9;
+  --gauge-base-color: rgba(226, 232, 240, 0.9);
+  --color-realizados-muted: rgba(34, 197, 94, 0.35);
+  --color-tardanza-muted: rgba(251, 191, 36, 0.35);
+  --color-faltas-muted: rgba(239, 68, 68, 0.35);
+  --color-encurso-muted: rgba(14, 165, 233, 0.35);
+  --seg-color-realizados: var(--color-realizados);
+  --seg-color-tardanza: var(--color-tardanza);
+  --seg-color-faltas: var(--color-faltas);
+  --seg-color-encurso: var(--color-encurso);
 }
 
 .attendance-head {
@@ -448,10 +461,20 @@ table tr.is-inactive td:first-child {
 
 .dashboard-gauge {
   --avance: 0%;
+  --segment-realizados: 0%;
+  --segment-tardanza: 0%;
+  --segment-falta: 0%;
+  --segment-encurso: 0%;
   width: min(200px, 60vw) !important;
   aspect-ratio: 1 / 1 !important;
   border-radius: 50% !important;
-  background: conic-gradient(#2563eb var(--avance), rgba(226, 232, 240, 0.9) 0) !important;
+  background: conic-gradient(
+    var(--seg-color-realizados) 0 var(--segment-realizados),
+    var(--seg-color-tardanza) var(--segment-realizados) var(--segment-tardanza),
+    var(--seg-color-faltas) var(--segment-tardanza) var(--segment-falta),
+    var(--seg-color-encurso) var(--segment-falta) var(--segment-encurso),
+    var(--gauge-base-color) var(--segment-encurso) 100%
+  ) !important;
   margin: 0 auto !important;
   position: relative !important;
 }
@@ -490,31 +513,108 @@ table tr.is-inactive td:first-child {
 .attendance-breakdown {
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-template-areas: "tardanza faltas encurso" ". realizados ." !important;
   gap: 12px !important;
 }
 
-.attendance-breakdown div {
+.attendance-breakdown .breakdown-card {
+  --accent-color: #94a3b8;
   background: #ffffff !important;
   border-radius: 14px !important;
   padding: 12px 14px !important;
   text-align: center !important;
   border: 1px solid rgba(148, 163, 184, 0.26) !important;
+  border-top-width: 4px !important;
+  border-top-color: var(--accent-color);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  cursor: pointer !important;
 }
 
-.attendance-breakdown span {
+.attendance-breakdown .breakdown-card.is-highlighted {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14) !important;
+  border-color: var(--accent-color) !important;
+}
+
+.attendance-breakdown .breakdown-card span {
   display: block !important;
   font-size: 0.75rem !important;
   text-transform: uppercase !important;
   letter-spacing: 0.08em !important;
-  color: #94a3b8 !important;
+  color: var(--accent-color) !important;
 }
 
-.attendance-breakdown strong {
+.attendance-breakdown .breakdown-card strong {
   display: block !important;
   font-size: 1.3rem !important;
-  margin-top: 4px !important;
   color: #0f172a !important;
+}
+
+.attendance-breakdown .breakdown-card.tardanza {
+  grid-area: tardanza;
+  --accent-color: var(--color-tardanza);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.16), rgba(245, 158, 11, 0.05)) !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+.attendance-breakdown .breakdown-card.faltas {
+  grid-area: faltas;
+  --accent-color: var(--color-faltas);
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.2), rgba(239, 68, 68, 0.08)) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.attendance-breakdown .breakdown-card.encurso {
+  grid-area: encurso;
+  --accent-color: var(--color-encurso);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.16), rgba(6, 182, 212, 0.08)) !important;
+  border-color: rgba(6, 182, 212, 0.35) !important;
+}
+
+.attendance-breakdown .breakdown-card.realizados {
+  grid-area: realizados;
+  --accent-color: var(--color-realizados);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(16, 185, 129, 0.08)) !important;
+  border-color: rgba(16, 185, 129, 0.32) !important;
+}
+
+.attendance-card.segment-highlight-tardanza {
+  --seg-color-realizados: var(--color-realizados-muted);
+  --seg-color-tardanza: var(--color-tardanza);
+  --seg-color-faltas: var(--color-faltas-muted);
+  --seg-color-encurso: var(--color-encurso-muted);
+}
+
+.attendance-card.segment-highlight-faltas {
+  --seg-color-realizados: var(--color-realizados-muted);
+  --seg-color-tardanza: var(--color-tardanza-muted);
+  --seg-color-faltas: var(--color-faltas);
+  --seg-color-encurso: var(--color-encurso-muted);
+}
+
+.attendance-card.segment-highlight-encurso {
+  --seg-color-realizados: var(--color-realizados-muted);
+  --seg-color-tardanza: var(--color-tardanza-muted);
+  --seg-color-faltas: var(--color-faltas-muted);
+  --seg-color-encurso: var(--color-encurso);
+}
+
+.attendance-card.segment-highlight-realizados {
+  --seg-color-realizados: var(--color-realizados);
+  --seg-color-tardanza: var(--color-tardanza-muted);
+  --seg-color-faltas: var(--color-faltas-muted);
+  --seg-color-encurso: var(--color-encurso-muted);
+}
+
+@media (max-width: 720px) {
+  .attendance-breakdown {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important;
+    grid-template-areas: none !important;
+  }
 }
 
 .alert-card {
@@ -1637,7 +1737,7 @@ table tr.is-inactive td:first-child {
   padding: 48px 60px !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 34px !important;
+  gap: 20px !important;
 }
 
 /* Vista previa (SweetAlert2) dimensionada */
@@ -1873,7 +1973,7 @@ table tr.is-inactive td:first-child {
 .admin-sections {
   display: flex !important;
   flex-direction: column !important;
-  gap: 26px !important;
+  gap: 18px !important;
   max-width: 1120px !important;
   width: 100% !important;
   margin: 0 auto !important;
