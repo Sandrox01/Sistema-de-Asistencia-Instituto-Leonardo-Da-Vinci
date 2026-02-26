@@ -1225,6 +1225,7 @@ async function nuevoDocente() {
 }
 
 async function editarDocente(dni, nombreActual, estadoActual = 1) {
+  const puedeReactivar = Number(estadoActual) === 0;
   const { value: formValues } = await Swal.fire({
     title: 'Editar Docente',
     html: `
@@ -1237,6 +1238,7 @@ async function editarDocente(dni, nombreActual, estadoActual = 1) {
               <input id="swal-docente-nombre" value="${sanitizeHtml(nombreActual)}" placeholder="Nombre completo del docente">
             </div>
           </div>
+          ${puedeReactivar ? `
           <div class="form-field">
             <label class="toggle-label">Estado</label>
             <div class="toggle-row">
@@ -1244,6 +1246,7 @@ async function editarDocente(dni, nombreActual, estadoActual = 1) {
               <label for="swal-docente-activo" class="toggle-caption">${Number(estadoActual) !== 0 ? 'Activo' : 'Inactivo'}</label>
             </div>
           </div>
+          ` : ''}
         </div>
       </div>
     `,
@@ -1252,16 +1255,20 @@ async function editarDocente(dni, nombreActual, estadoActual = 1) {
     confirmButtonText: 'Guardar cambios',
     cancelButtonText: 'Cancelar',
     didOpen: () => {
-      sincronizarToggleModal('swal-docente-activo');
+      if (puedeReactivar) {
+        sincronizarToggleModal('swal-docente-activo');
+      }
     },
     preConfirm: () => {
       const nombre = (document.getElementById('swal-docente-nombre')?.value || '').trim();
-      const activo = obtenerValorToggle('swal-docente-activo');
+      const activacion = puedeReactivar
+        ? obtenerValorToggle('swal-docente-activo')
+        : (Number(estadoActual) !== 0 ? 1 : 0);
       if (!nombre) {
         Swal.showValidationMessage('El nombre del docente no puede estar vacío');
         return false;
       }
-      return { nombre, activacion: activo };
+      return { nombre, activacion };
     }
   });
 
@@ -1505,6 +1512,7 @@ async function nuevoPeriodo() {
 }
 
 async function editarPeriodo(id, nombreActual, fechaInicioActual, fechaFinActual, estadoActual = 1) {
+  const puedeReactivar = Number(estadoActual) === 0;
   const { value: formValues } = await Swal.fire({
     title: 'Editar Periodo',
     width: '500px',
@@ -1527,6 +1535,7 @@ async function editarPeriodo(id, nombreActual, fechaInicioActual, fechaFinActual
             <label>Fecha fin *</label>
             <input id="swal-periodo-fin" type="date" value="${fechaFinActual}">
           </div>
+          ${puedeReactivar ? `
           <div class="form-field form-col-2">
             <label class="toggle-label">Estado</label>
             <div class="toggle-row">
@@ -1534,17 +1543,22 @@ async function editarPeriodo(id, nombreActual, fechaInicioActual, fechaFinActual
               <label for="swal-periodo-activo" class="toggle-caption">${Number(estadoActual) !== 0 ? 'Activo' : 'Inactivo'}</label>
             </div>
           </div>
+          ` : ''}
         </div>
       </div>
     `,
     didOpen: () => {
-      sincronizarToggleModal('swal-periodo-activo');
+      if (puedeReactivar) {
+        sincronizarToggleModal('swal-periodo-activo');
+      }
     },
     preConfirm: () => {
       const nombre = document.getElementById('swal-periodo-nombre').value.trim();
       const fecha_inicio = document.getElementById('swal-periodo-inicio').value;
       const fecha_fin = document.getElementById('swal-periodo-fin').value;
-      const activacion = obtenerValorToggle('swal-periodo-activo');
+      const activacion = puedeReactivar
+        ? obtenerValorToggle('swal-periodo-activo')
+        : (Number(estadoActual) !== 0 ? 1 : 0);
 
       if (!nombre || !fecha_inicio || !fecha_fin) {
         Swal.showValidationMessage('Todos los campos son obligatorios');
@@ -1657,7 +1671,7 @@ function renderizarCursos() {
             <button class="btn-small btn-edit" onclick="editarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}', ${Number(curso.activacion)})">
               <i class="fa-solid fa-pen"></i>
             </button>
-            <button class="btn-small btn-delete" onclick="eliminarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}")">
+            <button class="btn-small btn-delete" onclick="eliminarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}')">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
@@ -1709,6 +1723,7 @@ async function nuevoCurso() {
 }
 
 async function editarCurso(id, nombreActual, estadoActual = 1) {
+  const puedeReactivar = Number(estadoActual) === 0;
   const { value: formValues } = await Swal.fire({
     title: 'Editar Curso',
     html: `
@@ -1721,6 +1736,7 @@ async function editarCurso(id, nombreActual, estadoActual = 1) {
               <input id="swal-curso-nombre" value="${sanitizeHtml(nombreActual)}" placeholder="Nombre del curso">
             </div>
           </div>
+          ${puedeReactivar ? `
           <div class="form-field">
             <label class="toggle-label">Estado</label>
             <div class="toggle-row">
@@ -1728,6 +1744,7 @@ async function editarCurso(id, nombreActual, estadoActual = 1) {
               <label for="swal-curso-activo" class="toggle-caption">${Number(estadoActual) !== 0 ? 'Activo' : 'Inactivo'}</label>
             </div>
           </div>
+          ` : ''}
         </div>
       </div>
     `,
@@ -1736,11 +1753,15 @@ async function editarCurso(id, nombreActual, estadoActual = 1) {
     cancelButtonText: 'Cancelar',
     focusConfirm: false,
     didOpen: () => {
-      sincronizarToggleModal('swal-curso-activo');
+      if (puedeReactivar) {
+        sincronizarToggleModal('swal-curso-activo');
+      }
     },
     preConfirm: () => {
       const nombre = (document.getElementById('swal-curso-nombre')?.value || '').trim();
-      const activacion = obtenerValorToggle('swal-curso-activo');
+      const activacion = puedeReactivar
+        ? obtenerValorToggle('swal-curso-activo')
+        : (Number(estadoActual) !== 0 ? 1 : 0);
       if (!nombre) {
         Swal.showValidationMessage('El nombre del curso no puede estar vacío');
         return false;
@@ -2161,6 +2182,7 @@ async function editarHorario(
     return `<option value="${p.id_periodo}">${etiqueta}</option>`;
     }).join('');
 
+  const puedeReactivar = Number(estado_actual) === 0;
   const { value: formValues } = await Swal.fire({
     title: 'Editar Horario',
     width: '640px',
@@ -2218,6 +2240,7 @@ async function editarHorario(
             </div>
           </div>
 
+          ${puedeReactivar ? `
           <div class="form-field form-col-2">
             <label class="toggle-label">Estado</label>
             <div class="toggle-row">
@@ -2225,6 +2248,7 @@ async function editarHorario(
               <label for="swal-horario-activo" class="toggle-caption">${Number(estado_actual) !== 0 ? 'Activo' : 'Inactivo'}</label>
             </div>
           </div>
+          ` : ''}
         </div>
       </div>
     `,
@@ -2234,7 +2258,9 @@ async function editarHorario(
       document.getElementById('swal-dia').value = dia_actual;
       document.getElementById('swal-periodo').value = id_periodo_actual || '';
       document.getElementById('swal-es-recuperacion').checked = !!es_recuperacion_actual;
-      sincronizarToggleModal('swal-horario-activo');
+      if (puedeReactivar) {
+        sincronizarToggleModal('swal-horario-activo');
+      }
       // Inicializar botones AM/PM según la hora cargada
       ['swal-inicio', 'swal-fin'].forEach(id => {
         const input = document.getElementById(id);
@@ -2252,7 +2278,9 @@ async function editarHorario(
 
       const id_periodo = Number(document.getElementById('swal-periodo').value);
       const es_recuperacion = document.getElementById('swal-es-recuperacion').checked;
-      const activacion = obtenerValorToggle('swal-horario-activo');
+      const activacion = puedeReactivar
+        ? obtenerValorToggle('swal-horario-activo')
+        : (Number(estado_actual) !== 0 ? 1 : 0);
 
       if (!id_docente || !id_curso || !dia || !hora_inicio || !hora_fin ||
           !id_periodo || isNaN(id_periodo)) {
@@ -2673,8 +2701,7 @@ async function cargarAsistencias() {
   }
 
   try {
-    const query = vistaCompleta.asistencias ? '?incluirInactivos=1' : '';
-    const response = await fetch(`${BASE_URL}/api/admin/asistencias${query}`);
+    const response = await fetch(`${BASE_URL}/api/admin/asistencias?incluirInactivos=1`);
     const payload = await response.json().catch(() => null);
 
     if (!response.ok || !Array.isArray(payload)) {
@@ -2954,6 +2981,8 @@ function construirFormularioAsistencia(registro) {
   const faltaMarcada = !horaEntradaReal && !horaSalidaReal;
   const mostrarFaltaRecuperada = faltaMarcada || estadoEsFalta || faltaRecuperada;
   const recuperadaDisabledAttr = mostrarFaltaRecuperada ? '' : 'disabled';
+  const estadoActual = registro ? Number(registro.activacion ?? 1) : 1;
+  const puedeReactivar = registro && estadoActual === 0;
 
   return `
     <div class="form-container form-wide">
@@ -2999,11 +3028,6 @@ function construirFormularioAsistencia(registro) {
               <span class="checkbox-box" aria-hidden="true"></span>
               <span class="checkbox-text">Sesión de recuperación</span>
             </label>
-            <label class="checkbox-card" for="asist-activa">
-              <input id="asist-activa" type="checkbox" ${registro?.activacion === 0 ? '' : 'checked'}>
-              <span class="checkbox-box" aria-hidden="true"></span>
-              <span class="checkbox-text">Mostrar en reportes</span>
-            </label>
             ${mostrarFaltaRecuperada ? `
             <label class="checkbox-card" for="asist-falta-recuperada">
               <input id="asist-falta-recuperada" type="checkbox" ${faltaRecuperada ? 'checked' : ''} ${recuperadaDisabledAttr}>
@@ -3014,6 +3038,16 @@ function construirFormularioAsistencia(registro) {
             ` : ''}
           </div>
         </div>
+        ${puedeReactivar ? `
+        <div class="form-field form-col-2">
+          <label class="toggle-label">Estado del registro</label>
+          <div class="toggle-row">
+            <input type="checkbox" id="asist-activa" ${estadoActual === 0 ? '' : 'checked'}>
+            <label for="asist-activa" class="toggle-caption">${estadoActual === 0 ? 'Inactivo' : 'Activo'}</label>
+          </div>
+          <small class="form-help">Activa el registro para volver a incluirlo en reportes.</small>
+        </div>
+        ` : ''}
       </div>
     </div>
   `;
@@ -3034,6 +3068,11 @@ function abrirModalAsistencia(registro = null) {
     cancelButtonText: 'Cancelar',
     width: '540px',
     customClass: { popup: 'modal-asistencia' },
+    didOpen: () => {
+      if (document.getElementById('asist-activa')) {
+        sincronizarToggleModal('asist-activa');
+      }
+    },
     preConfirm: () => {
       const fecha = document.getElementById('asist-fecha').value.trim();
       const idDocente = document.getElementById('asist-docente').value;
@@ -3045,7 +3084,11 @@ function abrirModalAsistencia(registro = null) {
       const esRecuperacion = document.getElementById('asist-recuperacion').checked;
       const esFalta = !horaEntradaReal && !horaSalidaReal;
       const faltaRecuperada = esFalta && (document.getElementById('asist-falta-recuperada')?.checked || false);
-      const activacion = document.getElementById('asist-activa').checked ? 1 : 0;
+      const activacionInput = document.getElementById('asist-activa');
+      let activacion = registro ? Number(registro.activacion ?? 1) : 1;
+      if (activacionInput && !activacionInput.disabled) {
+        activacion = activacionInput.checked ? 1 : 0;
+      }
 
       if (!fecha || !idDocente || !idCurso || !horaEntradaProg || !horaSalidaProg) {
         Swal.showValidationMessage('Completa fecha, docente, curso y horas programadas.');

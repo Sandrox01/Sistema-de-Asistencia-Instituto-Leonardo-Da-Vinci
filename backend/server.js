@@ -2571,6 +2571,8 @@ app.put("/api/admin/asistencias/:id", async (req, res) => {
       falta_recuperada: faltaRecuperadaFinal,
     });
 
+    const activacionFinal = activacion === 0 ? 0 : 1;
+
     const [result] = await db.query(
       `UPDATE asistencias
        SET id_docente = ?,
@@ -2596,7 +2598,7 @@ app.put("/api/admin/asistencias/:id", async (req, res) => {
         detalle.minutosExcedentes,
         esRecuperacion ? 1 : 0,
         faltaRecuperadaFinal,
-        activacion === 0 ? 0 : 1,
+        activacionFinal,
         id,
       ]
     );
@@ -2604,6 +2606,13 @@ app.put("/api/admin/asistencias/:id", async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: "Asistencia no encontrada." });
     }
+
+    console.log("[Asistencias] Actualizar", id, {
+      idDocente,
+      idCurso,
+      fecha,
+      activacion: activacionFinal,
+    });
 
     const registro = await obtenerAsistenciaAdmin(id);
     broadcastAdminRefresh("asistencias:update");
