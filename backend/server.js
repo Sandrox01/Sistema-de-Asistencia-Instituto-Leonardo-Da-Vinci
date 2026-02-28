@@ -7,10 +7,19 @@ const db = require("./db");
 const backupRoutes = require('./routes/backup');
 
 const ROOT_PATH = path.join(__dirname, "..");
+const PUBLIC_PAGES_PATH = path.join(ROOT_PATH, "pages");
+const PUBLIC_STYLE_PATH = path.join(ROOT_PATH, "style");
+const PUBLIC_SCRIPTS_PATH = path.join(ROOT_PATH, "scripts");
+const PUBLIC_REPORTS_PATH = path.join(ROOT_PATH, "reportes");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+// Sirve los archivos estáticos del frontend para que la UI viva en el mismo host del API.
+app.use(express.static(PUBLIC_PAGES_PATH));
+app.use("/style", express.static(PUBLIC_STYLE_PATH));
+app.use("/scripts", express.static(PUBLIC_SCRIPTS_PATH));
+app.use("/reportes", express.static(PUBLIC_REPORTS_PATH));
 
 const ADMIN_STREAM_KEEP_ALIVE_MS = 30 * 1000;
 const adminStreamClients = new Map();
