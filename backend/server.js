@@ -3257,12 +3257,23 @@ async function sincronizarReportesMensualesPendientes({ motivo = "inicio-servido
       return;
     }
 
-    console.log(`📆 Sincronizando reportes mensuales pendientes (${mesesPendientes.length} meses)...`);
+    const mesesAProcesar = mesesPendientes.filter((registro) => (
+      registro.anio < anioActual || (registro.anio === anioActual && registro.mes < mesActual)
+    ));
+    const tieneMesActualOFuturo = mesesPendientes.some((registro) => (
+      registro.anio > anioActual || (registro.anio === anioActual && registro.mes >= mesActual)
+    ));
 
-    for (const registro of mesesPendientes) {
-      if (registro.anio > anioActual || (registro.anio === anioActual && registro.mes >= mesActual)) {
-        continue;
+    if (!mesesAProcesar.length) {
+      if (tieneMesActualOFuturo) {
+        console.log("ℹ️ Mes actual detectado: se generara al cierre de mes.");
       }
+      return;
+    }
+
+    console.log(`📆 Sincronizando reportes mensuales pendientes (${mesesAProcesar.length} meses)...`);
+
+    for (const registro of mesesAProcesar) {
       await generarReportesMensualesDelMes(registro.anio, registro.mes, motivo, { modo: "asistencias" });
     }
   } catch (err) {
