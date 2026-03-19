@@ -523,7 +523,7 @@
                 placeholder="Ej: 48970090"
                 maxlength="8"
                 oninput="this.value = this.value.replace(/[^0-9]/g, '')"
-                onkeydown="if(event.key==='Enter') verificarDNI()"
+                onkeyup="if(event.key==='Enter'){event.preventDefault(); verificarDNI();}"
               />
             </div>
             <button class="btn-primary" onclick="verificarDNI()">

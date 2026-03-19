@@ -8,14 +8,18 @@ let horarios = [];
 let bloqueados = [];
 let activaciones = [];
 let periodos = [];
+let periodosReferenciaCache = [];
 let asistencias = [];
 let promesaCargaGlobal = null;
 // Usar rutas relativas (mismo origen cuando se sirve desde backend).
 // Si la página NO se sirve desde el backend (ej. Live Server en :5500 o file://),
 // forzar el BASE_URL hacia el servidor backend en http://localhost:3000
+const API_HOST = (typeof window !== 'undefined' && window.location && window.location.hostname)
+  ? window.location.hostname
+  : 'localhost';
 const BASE_URL = (typeof window !== 'undefined' && window.location && window.location.port === '3000')
   ? ''
-  : 'http://localhost:3000';
+  : `http://${API_HOST}:3000`;
 const ADMIN_PASSWORD = 'admin123';
 const ADMIN_STREAM_URL = `${BASE_URL || ''}/api/admin/stream`;
 const STREAM_RETRY_BASE_MS = 3000;
@@ -27,6 +31,33 @@ let streamRetryTimer = null;
 let streamRetryDelay = STREAM_RETRY_BASE_MS;
 let autoRefreshTimer = null;
 let refreshPendiente = false;
+
+function habilitarEnterEnBotones() {
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.repeat) return;
+    const target = event.target;
+    if (!target) return;
+    const popup = document.querySelector('.swal2-popup');
+    if (popup && popup.contains(target)) {
+      const tag = target.tagName;
+      const esCampoTexto = tag === 'INPUT' || tag === 'SELECT';
+      if (esCampoTexto) {
+        event.preventDefault();
+        if (typeof Swal !== 'undefined' && Swal.clickConfirm) {
+          Swal.clickConfirm();
+        }
+      }
+      return;
+    }
+    const esBoton = target.tagName === 'BUTTON' || target.getAttribute('role') === 'button';
+    if (!esBoton) return;
+    if (target.disabled || target.getAttribute('aria-disabled') === 'true') return;
+    event.preventDefault();
+    target.click();
+  });
+}
+
+habilitarEnterEnBotones();
 
 document.addEventListener('visibilitychange', manejarVisibilidadPanel);
 window.addEventListener('beforeunload', () => cerrarStreamTiempoReal(true));
@@ -402,6 +433,30 @@ function esPeriodoVigente(periodo = {}) {
   return despuesDeInicio && antesDeFin;
 }
 
+function obtenerEstadoPeriodoHorario(horario = {}) {
+  if (horario.estado_periodo) return String(horario.estado_periodo);
+  const hoy = toInputDateValue(new Date());
+  const inicio = toInputDateValue(horario.periodo_inicio || horario.fecha_inicio);
+  const fin = toInputDateValue(horario.periodo_fin || horario.fecha_fin);
+  if (!inicio && !fin) return 'sin_periodo';
+  if (Number(horario.activacion_periodo) === 0) return 'inactivo';
+  if (inicio && inicio > hoy) return 'futuro';
+  if (fin && fin < hoy) return 'vencido';
+  return 'vigente';
+}
+
+function esHorarioActivo(horario = {}) {
+  if (!horario) return false;
+  if (Number(horario.activacion) === 0) return false;
+  if (Number(horario.activacion_docente) === 0) return false;
+  if (Number(horario.activacion_curso) === 0) return false;
+  if (typeof horario.periodo_activo !== 'undefined') {
+    return Number(horario.periodo_activo) !== 0;
+  }
+  const estadoPeriodo = obtenerEstadoPeriodoHorario(horario);
+  return estadoPeriodo === 'vigente' || estadoPeriodo === 'sin_periodo';
+}
+
 function ordenarAsistenciasDesc(lista = []) {
   return [...lista].sort((a, b) => {
     const fechaA = a.fecha ? new Date(a.fecha).getTime() : 0;
@@ -444,7 +499,9 @@ function actualizarDashboardInicio() {
   setDashboardText('metricPeriodosVigentes', periodosVigentes);
   setDashboardText('metricPeriodosTotal', periodos.length || 0);
 
-  const horariosActivos = contarActivos(horarios);
+  const horariosActivos = Array.isArray(horarios)
+    ? horarios.filter((h) => esHorarioActivo(h)).length
+    : 0;
   setDashboardText('metricHorariosActivos', horariosActivos);
   setDashboardText('metricHorariosTotal', horarios.length || 0);
 
@@ -628,6 +685,31 @@ function normalizarTexto(valor) {
     : '';
 }
 
+const CARRERAS_VALIDAS = ['CAT', 'INSTITUTO', 'SECRETARIADO'];
+const TURNOS_VALIDOS = ['M', 'T', 'N', 'SIN'];
+
+function normalizarCodigo(valor) {
+  if (valor === null || typeof valor === 'undefined') return '';
+  return String(valor).trim().toUpperCase();
+}
+
+function esCarreraValida(valor) {
+  const clave = normalizarCodigo(valor);
+  return CARRERAS_VALIDAS.includes(clave);
+}
+
+function esTurnoValido(valor) {
+  const clave = normalizarCodigo(valor);
+  return TURNOS_VALIDOS.includes(clave);
+}
+
+function formatearTurnoLabel(turno) {
+  const clave = normalizarCodigo(turno);
+  if (clave === 'SIN') return 'No especificado';
+  if (clave === 'M' || clave === 'T' || clave === 'N') return clave;
+  return '';
+}
+
 function convertirIsoALatam(valor) {
   if (!valor) return '';
   const iso = valor.toString().slice(0, 10);
@@ -683,6 +765,172 @@ function toInputTimeValue(valor) {
   const str = valor.toString();
   if (!str.includes(':')) return '';
   return str.slice(0, 5);
+}
+
+function construirNombrePeriodo({ carrera, curso, turno, fecha_inicio, fecha_fin }) {
+  const carreraFinal = normalizarCodigo(carrera);
+  const turnoFinal = normalizarCodigo(turno) || 'SIN';
+  const nombreCurso = (curso || '').trim();
+  const inicio = formatearFechaSimple(fecha_inicio);
+  const fin = formatearFechaSimple(fecha_fin);
+
+  if (!nombreCurso || !inicio || !fin || !esCarreraValida(carreraFinal) || !esTurnoValido(turnoFinal)) {
+    return '';
+  }
+
+  return `${carreraFinal}-${nombreCurso}-${turnoFinal}-${inicio}-${fin}`;
+}
+
+function construirPrefijoPeriodo(curso = {}) {
+  const carrera = normalizarCodigo(curso.carrera);
+  const turno = normalizarCodigo(curso.turno) || 'SIN';
+  const nombre = (curso.nombre || '').trim();
+  if (!nombre || !esCarreraValida(carrera) || !esTurnoValido(turno)) return '';
+  return `${carrera}-${nombre}-${turno}-`;
+}
+
+function seleccionarPeriodoActivo(candidatos = []) {
+  if (!candidatos.length) return null;
+  const activo = candidatos.find((p) => Number(p.activacion) !== 0);
+  return activo || candidatos[0];
+}
+
+function obtenerCursosPorCarrera(carrera, lista = cursos) {
+  const clave = normalizarCodigo(carrera);
+  if (!clave) return [];
+  return (Array.isArray(lista) ? lista : []).filter((c) => normalizarCodigo(c.carrera) === clave);
+}
+
+function obtenerCursoPorId(idCurso) {
+  return cursos.find((c) => Number(c.id_curso) === Number(idCurso)) || null;
+}
+
+function obtenerPeriodoPorId(idPeriodo, lista = periodos) {
+  return (Array.isArray(lista) ? lista : []).find((p) => Number(p.id_periodo) === Number(idPeriodo)) || null;
+}
+
+function obtenerPeriodoPorNombre(nombre, lista = periodos) {
+  const clave = normalizarTexto(nombre);
+  if (!clave) return null;
+  const candidatos = (Array.isArray(lista) ? lista : []).filter((p) => normalizarTexto(p.nombre) === clave);
+  return seleccionarPeriodoActivo(candidatos);
+}
+
+function obtenerPeriodoPorCurso(curso, lista = periodos) {
+  if (!curso) return null;
+  const candidatosBase = Array.isArray(lista) ? lista : [];
+  const nombreCurso = (curso.nombre || '').trim();
+  const carrera = normalizarCodigo(curso.carrera);
+  const prefijos = [];
+
+  const prefijoCompleto = construirPrefijoPeriodo(curso);
+  if (prefijoCompleto) {
+    prefijos.push(prefijoCompleto);
+  }
+  if (nombreCurso && esCarreraValida(carrera)) {
+    prefijos.push(`${carrera}-${nombreCurso}-`);
+    prefijos.push(`${carrera}-${nombreCurso}`);
+  }
+  if (nombreCurso) {
+    prefijos.push(nombreCurso);
+  }
+
+  for (const prefijo of prefijos) {
+    const prefijoClave = normalizarTexto(prefijo);
+    if (!prefijoClave) continue;
+    const candidatos = candidatosBase.filter((p) => normalizarTexto(p.nombre).startsWith(prefijoClave));
+    const elegido = seleccionarPeriodoActivo(candidatos);
+    if (elegido) return elegido;
+  }
+
+  if (nombreCurso) {
+    const claveNombre = normalizarTexto(nombreCurso);
+    const claveCarrera = normalizarTexto(carrera);
+    const candidatos = candidatosBase.filter((p) => {
+      const nombreNorm = normalizarTexto(p.nombre);
+      if (!nombreNorm.includes(claveNombre)) return false;
+      if (claveCarrera) return nombreNorm.includes(claveCarrera);
+      return true;
+    });
+    const elegido = seleccionarPeriodoActivo(candidatos);
+    if (elegido) return elegido;
+  }
+
+  return null;
+}
+
+async function obtenerPeriodosReferencia(force = false) {
+  if (!force && Array.isArray(periodosReferenciaCache) && periodosReferenciaCache.length) {
+    return periodosReferenciaCache;
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/api/periodos?incluirInactivos=1`);
+    const lista = await res.json();
+    if (Array.isArray(lista) && lista.length) {
+      periodosReferenciaCache = lista;
+      return lista;
+    }
+  } catch (err) {
+    console.warn('No se pudieron cargar periodos completos:', err);
+  }
+
+  periodosReferenciaCache = Array.isArray(periodos) ? periodos : [];
+  return periodosReferenciaCache;
+}
+
+async function sincronizarPeriodoCurso({ cursoNuevo, cursoAnterior, fecha_inicio, fecha_fin }) {
+  const nombrePeriodo = construirNombrePeriodo({
+    carrera: cursoNuevo?.carrera,
+    curso: cursoNuevo?.nombre,
+    turno: cursoNuevo?.turno,
+    fecha_inicio,
+    fecha_fin
+  });
+
+  if (!nombrePeriodo || !fecha_inicio || !fecha_fin) {
+    throw new Error('Datos incompletos para sincronizar periodo');
+  }
+
+  const periodosLista = await obtenerPeriodosReferencia();
+  let periodoObjetivo = null;
+
+  if (cursoAnterior) {
+    periodoObjetivo = obtenerPeriodoPorCurso(cursoAnterior, periodosLista);
+  }
+  if (!periodoObjetivo) {
+    periodoObjetivo = obtenerPeriodoPorCurso(cursoNuevo, periodosLista);
+  }
+
+  if (periodoObjetivo && periodoObjetivo.id_periodo) {
+    const res = await fetch(`${BASE_URL}/api/admin/periodos/${periodoObjetivo.id_periodo}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: nombrePeriodo, fecha_inicio, fecha_fin })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al actualizar periodo');
+    }
+
+    return { accion: 'update', id_periodo: periodoObjetivo.id_periodo };
+  }
+
+  const res = await fetch(`${BASE_URL}/api/admin/periodos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: nombrePeriodo, fecha_inicio, fecha_fin })
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.error || 'Error al crear periodo');
+  }
+
+  return { accion: 'create' };
 }
 
 function construirFilaPreview(reporte) {
@@ -751,7 +999,7 @@ window.addEventListener('load', async () => {
   try {
     accesoPermitido = await solicitarAccesoAdmin();
     if (!accesoPermitido) {
-      window.location.replace('../pages/index.html');
+      window.location.replace('../index.html');
       return;
     }
     await ejecutarCargaTotal();
@@ -1152,7 +1400,7 @@ async function nuevoDocente() {
   const { value: formValues } = await Swal.fire({
     title: 'Nuevo Docente',
     html: `
-      <div class="form-container">
+      <div class="form-container form-curso">
         <div class="form-grid">
 
           <div class="form-field form-col-2">
@@ -1229,7 +1477,7 @@ async function editarDocente(dni, nombreActual, estadoActual = 1) {
   const { value: formValues } = await Swal.fire({
     title: 'Editar Docente',
     html: `
-      <div class="form-container">
+      <div class="form-container form-curso">
         <div class="form-grid">
           <div class="form-field form-col-2">
             <label for="swal-docente-nombre">Nombre completo *</label>
@@ -1335,6 +1583,7 @@ async function cargarCursos() {
   const query = vistaCompleta.cursos ? '?incluirInactivos=1' : '';
   const res = await fetch(`${BASE_URL}/api/cursos${query}`);
     cursos = await res.json();
+    await obtenerPeriodosReferencia(true);
     renderizarCursos();
   } catch (err) {
     console.error('Error cargando cursos:', err);
@@ -1636,6 +1885,9 @@ function renderizarCursos() {
   tbody.innerHTML = '';
   
   const base = vistaCompleta.cursos ? cursos : cursos.filter((curso) => Number(curso.activacion) !== 0);
+  const periodosReferencia = Array.isArray(periodosReferenciaCache) && periodosReferenciaCache.length
+    ? periodosReferenciaCache
+    : periodos;
 
   const filtro = normalizarTexto(filtroCursos);
   const lista = filtro
@@ -1646,7 +1898,7 @@ function renderizarCursos() {
     const mensaje = base.length === 0
       ? 'No hay cursos activos en esta vista'
       : 'Sin coincidencias según la búsqueda.';
-    tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#888;">${mensaje}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#888;">${mensaje}</td></tr>`;
     renderizarControlesPaginacion('cursos', obtenerMetaPaginacionVacia('cursos'));
     return;
   }
@@ -1662,13 +1914,24 @@ function renderizarCursos() {
 
   const { items, meta } = paginarLista(ordenados, 'cursos');
   tbody.innerHTML = items.map((curso) => {
+    const periodo = obtenerPeriodoPorCurso(curso, periodosReferencia);
+    const fechaInicioIso = periodo ? formatearFechaSimple(periodo.fecha_inicio) : '';
+    const fechaFinIso = periodo ? formatearFechaSimple(periodo.fecha_fin) : '';
+    const fechaInicioLabel = fechaInicioIso ? convertirIsoALatam(fechaInicioIso) : '';
+    const fechaFinLabel = fechaFinIso ? convertirIsoALatam(fechaFinIso) : '';
     const extraClase = Number(curso.activacion) === 0 ? 'class="is-inactive"' : '';
+    const carreraLabel = sanitizeHtml(curso.carrera || 'Sin carrera');
+    const turnoLabel = sanitizeHtml(formatearTurnoLabel(curso.turno) || 'No especificado');
     return `
       <tr ${extraClase}>
+        <td>${carreraLabel}</td>
         <td>${curso.nombre}</td>
+        <td>${turnoLabel}</td>
+        <td>${fechaInicioLabel}</td>
+        <td>${fechaFinLabel}</td>
         <td>
           <div class="btn-actions">
-            <button class="btn-small btn-edit" onclick="editarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}', ${Number(curso.activacion)})">
+            <button class="btn-small btn-edit" onclick="editarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}', '${(curso.carrera || '').replace(/'/g, "\\'")}', '${(curso.turno || '').replace(/'/g, "\\'")}', ${Number(curso.activacion)})">
               <i class="fa-solid fa-pen"></i>
             </button>
             <button class="btn-small btn-delete" onclick="eliminarCurso(${curso.id_curso}, '${curso.nombre.replace(/'/g, "\\'")}')">
@@ -1685,45 +1948,163 @@ function renderizarCursos() {
 }
 
 async function nuevoCurso() {
-  const { value: nombre } = await Swal.fire({
+  const carrerasOptions = CARRERAS_VALIDAS.map(carrera =>
+    `<option value="${carrera}">${carrera}</option>`
+  ).join('');
+
+  const turnosOptions = [
+    { valor: 'M', label: 'M (Mañana)' },
+    { valor: 'T', label: 'T (Tarde)' },
+    { valor: 'N', label: 'N (Noche)' },
+    { valor: 'SIN', label: 'Sin especificar' }
+  ].map(turno => `<option value="${turno.valor}">${turno.label}</option>`).join('');
+
+  const { value: formValues } = await Swal.fire({
     title: 'Nuevo Curso',
-    input: 'text',
-    inputPlaceholder: 'Nombre del curso',
+    width: '560px',
+    customClass: { popup: 'modal-slim' },
     showCancelButton: true,
     confirmButtonText: 'Crear',
     cancelButtonText: 'Cancelar',
-    inputValidator: (value) => {
-      if (!value || !value.trim()) {
-        return 'El nombre del curso no puede estar vacío';
+    html: `
+      <div class="form-container">
+        <div class="form-grid">
+          <div class="form-field form-col-2">
+            <label>Nombre del curso *</label>
+            <div class="input-icon">
+              <i class="fa-solid fa-book"></i>
+              <input id="swal-curso-nombre" placeholder="Nombre del curso">
+            </div>
+          </div>
+          <div class="form-field form-half">
+            <label>Carrera *</label>
+            <select id="swal-curso-carrera">
+              <option value="">Seleccionar carrera</option>
+              ${carrerasOptions}
+            </select>
+          </div>
+          <div class="form-field form-half">
+            <label>Turno *</label>
+            <select id="swal-curso-turno">
+              <option value="">Seleccionar turno</option>
+              ${turnosOptions}
+            </select>
+          </div>
+          <div class="form-field form-half">
+            <label>Fecha inicio *</label>
+            <input id="swal-curso-inicio" type="date">
+          </div>
+          <div class="form-field form-half">
+            <label>Fecha fin *</label>
+            <input id="swal-curso-fin" type="date">
+          </div>
+        </div>
+      </div>
+    `,
+    preConfirm: () => {
+      const nombre = (document.getElementById('swal-curso-nombre')?.value || '').trim();
+      const carrera = document.getElementById('swal-curso-carrera')?.value || '';
+      const turno = document.getElementById('swal-curso-turno')?.value || '';
+      const fecha_inicio = document.getElementById('swal-curso-inicio')?.value || '';
+      const fecha_fin = document.getElementById('swal-curso-fin')?.value || '';
+
+      if (!nombre || !fecha_inicio || !fecha_fin || !esCarreraValida(carrera) || !esTurnoValido(turno)) {
+        Swal.showValidationMessage('Todos los campos son obligatorios');
+        return false;
       }
+
+      if (fecha_inicio > fecha_fin) {
+        Swal.showValidationMessage('La fecha fin debe ser mayor o igual a la fecha inicio');
+        return false;
+      }
+
+      return { nombre, carrera, turno, fecha_inicio, fecha_fin };
     }
   });
 
-  if (nombre && nombre.trim() !== '') {
-    try {
-      const res = await fetch(`${BASE_URL}/api/admin/cursos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nombre: nombre.trim() })
-      });
+  if (!formValues) return;
 
-      const data = await res.json();
+  try {
+    const res = await fetch(`${BASE_URL}/api/admin/cursos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nombre: formValues.nombre,
+        carrera: formValues.carrera,
+        turno: formValues.turno
+      })
+    });
 
-      if (res.ok) {
-        Swal.fire('¡Éxito!', 'Curso creado correctamente', 'success');
-        await cargarCursos();
-      } else {
-        throw new Error(data.error || 'Error al crear curso');
-      }
-    } catch (err) {
-      console.error('Error:', err);
-      Swal.fire('Error', err.message || 'No se pudo crear el curso', 'error');
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Error al crear curso');
     }
+
+    let periodoOk = true;
+    try {
+      await sincronizarPeriodoCurso({
+        cursoNuevo: {
+          nombre: formValues.nombre,
+          carrera: formValues.carrera,
+          turno: formValues.turno
+        },
+        fecha_inicio: formValues.fecha_inicio,
+        fecha_fin: formValues.fecha_fin
+      });
+    } catch (err) {
+      periodoOk = false;
+      console.error('Error sincronizando periodo:', err);
+    }
+
+    await Promise.all([cargarCursos(), cargarPeriodos()]);
+
+    if (periodoOk) {
+      Swal.fire('¡Éxito!', 'Curso creado y periodo asignado correctamente', 'success');
+    } else {
+      Swal.fire('Atención', 'Curso creado, pero no se pudo registrar el periodo. Edita el curso para reintentar.', 'warning');
+    }
+  } catch (err) {
+    console.error('Error:', err);
+    Swal.fire('Error', err.message || 'No se pudo crear el curso', 'error');
   }
 }
 
-async function editarCurso(id, nombreActual, estadoActual = 1) {
+async function editarCurso(id, nombreActual, carreraActual, turnoActual, estadoActual = 1) {
   const puedeReactivar = Number(estadoActual) === 0;
+  let fechaInicioActual = '';
+  let fechaFinActual = '';
+  let avisoPeriodo = '';
+  const carrerasOptions = CARRERAS_VALIDAS.map(carrera =>
+    `<option value="${carrera}">${carrera}</option>`
+  ).join('');
+  const turnosOptions = [
+    { valor: 'M', label: 'M (Mañana)' },
+    { valor: 'T', label: 'T (Tarde)' },
+    { valor: 'N', label: 'N (Noche)' },
+    { valor: 'SIN', label: 'Sin especificar' }
+  ].map(turno => `<option value="${turno.valor}">${turno.label}</option>`).join('');
+  const carreraActualNorm = esCarreraValida(carreraActual) ? normalizarCodigo(carreraActual) : '';
+  const turnoActualNorm = esTurnoValido(turnoActual) ? normalizarCodigo(turnoActual) : '';
+
+  try {
+    const periodosRef = await obtenerPeriodosReferencia();
+    const periodoActual = obtenerPeriodoPorCurso({
+      nombre: nombreActual,
+      carrera: carreraActualNorm,
+      turno: turnoActualNorm
+    }, periodosRef);
+    if (periodoActual) {
+      fechaInicioActual = formatearFechaSimple(periodoActual.fecha_inicio);
+      fechaFinActual = formatearFechaSimple(periodoActual.fecha_fin);
+    } else {
+      avisoPeriodo = '<div class="form-field form-col-2"><div class="form-help">No se encontró un periodo asociado. Ingresa las fechas para crearlo.</div></div>';
+    }
+  } catch (err) {
+    console.error('Error obteniendo periodo del curso:', err);
+    avisoPeriodo = '<div class="form-field form-col-2"><div class="form-help">No se pudieron cargar las fechas del periodo.</div></div>';
+  }
+
   const { value: formValues } = await Swal.fire({
     title: 'Editar Curso',
     html: `
@@ -1736,6 +2117,29 @@ async function editarCurso(id, nombreActual, estadoActual = 1) {
               <input id="swal-curso-nombre" value="${sanitizeHtml(nombreActual)}" placeholder="Nombre del curso">
             </div>
           </div>
+          <div class="form-field form-half">
+            <label>Carrera *</label>
+            <select id="swal-curso-carrera">
+              <option value="">Seleccionar carrera</option>
+              ${carrerasOptions}
+            </select>
+          </div>
+          <div class="form-field form-half">
+            <label>Turno *</label>
+            <select id="swal-curso-turno">
+              <option value="">Seleccionar turno</option>
+              ${turnosOptions}
+            </select>
+          </div>
+          <div class="form-field form-half">
+            <label>Fecha inicio *</label>
+            <input id="swal-curso-inicio" type="date" value="${fechaInicioActual}">
+          </div>
+          <div class="form-field form-half">
+            <label>Fecha fin *</label>
+            <input id="swal-curso-fin" type="date" value="${fechaFinActual}">
+          </div>
+          ${avisoPeriodo}
           ${puedeReactivar ? `
           <div class="form-field">
             <label class="toggle-label">Estado</label>
@@ -1753,20 +2157,32 @@ async function editarCurso(id, nombreActual, estadoActual = 1) {
     cancelButtonText: 'Cancelar',
     focusConfirm: false,
     didOpen: () => {
+      const carreraSelect = document.getElementById('swal-curso-carrera');
+      const turnoSelect = document.getElementById('swal-curso-turno');
+      if (carreraSelect && carreraActualNorm) carreraSelect.value = carreraActualNorm;
+      if (turnoSelect && turnoActualNorm) turnoSelect.value = turnoActualNorm;
       if (puedeReactivar) {
         sincronizarToggleModal('swal-curso-activo');
       }
     },
     preConfirm: () => {
       const nombre = (document.getElementById('swal-curso-nombre')?.value || '').trim();
+      const carrera = document.getElementById('swal-curso-carrera')?.value || '';
+      const turno = document.getElementById('swal-curso-turno')?.value || '';
+      const fecha_inicio = document.getElementById('swal-curso-inicio')?.value || '';
+      const fecha_fin = document.getElementById('swal-curso-fin')?.value || '';
       const activacion = puedeReactivar
         ? obtenerValorToggle('swal-curso-activo')
         : (Number(estadoActual) !== 0 ? 1 : 0);
-      if (!nombre) {
-        Swal.showValidationMessage('El nombre del curso no puede estar vacío');
+      if (!nombre || !fecha_inicio || !fecha_fin || !esCarreraValida(carrera) || !esTurnoValido(turno)) {
+        Swal.showValidationMessage('Todos los campos son obligatorios');
         return false;
       }
-      return { nombre, activacion };
+      if (fecha_inicio > fecha_fin) {
+        Swal.showValidationMessage('La fecha fin debe ser mayor o igual a la fecha inicio');
+        return false;
+      }
+      return { nombre, carrera, turno, fecha_inicio, fecha_fin, activacion };
     }
   });
 
@@ -1776,14 +2192,45 @@ async function editarCurso(id, nombreActual, estadoActual = 1) {
     const res = await fetch(`${BASE_URL}/api/admin/cursos/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formValues)
+      body: JSON.stringify({
+        nombre: formValues.nombre,
+        carrera: formValues.carrera,
+        turno: formValues.turno,
+        activacion: formValues.activacion
+      })
     });
 
     const data = await res.json();
 
     if (res.ok) {
-      Swal.fire('¡Éxito!', 'Curso actualizado correctamente', 'success');
-      await cargarCursos();
+      let periodoOk = true;
+      try {
+        await sincronizarPeriodoCurso({
+          cursoNuevo: {
+            nombre: formValues.nombre,
+            carrera: formValues.carrera,
+            turno: formValues.turno
+          },
+          cursoAnterior: {
+            nombre: nombreActual,
+            carrera: carreraActual,
+            turno: turnoActual
+          },
+          fecha_inicio: formValues.fecha_inicio,
+          fecha_fin: formValues.fecha_fin
+        });
+      } catch (err) {
+        periodoOk = false;
+        console.error('Error sincronizando periodo:', err);
+      }
+
+      await Promise.all([cargarCursos(), cargarPeriodos()]);
+
+      if (periodoOk) {
+        Swal.fire('¡Éxito!', 'Curso actualizado correctamente', 'success');
+      } else {
+        Swal.fire('Atención', 'Curso actualizado, pero no se pudo sincronizar el periodo. Reintenta guardando nuevamente.', 'warning');
+      }
     } else {
       throw new Error(data.error || 'Error al actualizar');
     }
@@ -1851,7 +2298,7 @@ function renderizarHorarios() {
     : horarios.filter((h) => Number(h.activacion) !== 0 && Number(h.activacion_docente) !== 0 && Number(h.activacion_curso) !== 0);
 
   if (base.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888;">No hay horarios activos en esta vista</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#888;">No hay horarios activos en esta vista</td></tr>';
     renderizarControlesPaginacion('horarios', obtenerMetaPaginacionVacia('horarios'));
     return;
   }
@@ -1860,21 +2307,23 @@ function renderizarHorarios() {
   const lista = filtro
     ? base.filter((h) => {
         const docenteTxt = normalizarTexto(h.docente);
+        const carreraTxt = normalizarTexto(h.carrera);
         const cursoTxt = normalizarTexto(h.curso);
+        const turnoTxt = normalizarTexto(formatearTurnoLabel(h.turno));
         const diaTxt = normalizarTexto(h.dia);
-        return docenteTxt.includes(filtro) || cursoTxt.includes(filtro) || diaTxt.includes(filtro);
+        return docenteTxt.includes(filtro) || carreraTxt.includes(filtro) || cursoTxt.includes(filtro) || turnoTxt.includes(filtro) || diaTxt.includes(filtro);
       })
     : base;
 
   if (lista.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888;">Sin coincidencias para la búsqueda.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#888;">Sin coincidencias para la búsqueda.</td></tr>';
     renderizarControlesPaginacion('horarios', obtenerMetaPaginacionVacia('horarios'));
     return;
   }
 
   const ordenados = [...lista].sort((a, b) => {
-    const aActivo = Number(a.activacion) !== 0 && Number(a.activacion_docente) !== 0 && Number(a.activacion_curso) !== 0;
-    const bActivo = Number(b.activacion) !== 0 && Number(b.activacion_docente) !== 0 && Number(b.activacion_curso) !== 0;
+    const aActivo = esHorarioActivo(a);
+    const bActivo = esHorarioActivo(b);
     if (aActivo === bActivo) {
       const docenteCmp = (a.docente || '').localeCompare(b.docente || '');
       if (docenteCmp !== 0) return docenteCmp;
@@ -1887,16 +2336,28 @@ function renderizarHorarios() {
   const { items, meta } = paginarLista(ordenados, 'horarios');
   tbody.innerHTML = items.map((h) => {
     const registroInactivo = Number(h.activacion) === 0 || Number(h.activacion_docente) === 0 || Number(h.activacion_curso) === 0;
-    const extraClase = registroInactivo ? 'class="is-inactive"' : '';
+    const estadoPeriodo = obtenerEstadoPeriodoHorario(h);
+    const periodoFuturo = !registroInactivo && estadoPeriodo === 'futuro';
+    const clasesFila = [registroInactivo ? 'is-inactive' : '', periodoFuturo ? 'is-future' : ''].filter(Boolean).join(' ');
+    const extraClase = clasesFila ? `class="${clasesFila}"` : '';
+    const carreraLabel = sanitizeHtml(h.carrera || 'Sin carrera');
+    const turnoLabel = sanitizeHtml(formatearTurnoLabel(h.turno) || 'No especificado');
+    const inicioPeriodo = periodoFuturo && h.periodo_inicio ? formatearFechaSimple(h.periodo_inicio) : '';
+    const etiquetaPeriodo = inicioPeriodo
+      ? `<span class="badge-futuro" title="Inicia el ${inicioPeriodo}">INICIA ${inicioPeriodo}</span>`
+      : '';
     return `
       <tr ${extraClase}>
         <td>${h.docente}</td>
+        <td>${carreraLabel}</td>
         <td>
           <span>${h.curso}</span>
           ${h.es_recuperacion
             ? '<span class="badge-recuperacion" title="Clase de recuperación">RECUPERACIÓN</span>'
             : ''}
+          ${etiquetaPeriodo}
         </td>
+        <td>${turnoLabel}</td>
         <td>${h.dia}</td>
         <td>${h.hora_inicio}</td>
         <td>${h.hora_fin}</td>
@@ -1939,23 +2400,15 @@ async function nuevoHorario() {
   if (docentes.length === 0) await cargarDocentes();
   if (cursos.length === 0) await cargarCursos();
   if (periodos.length === 0) await cargarPeriodos();
+  const periodosReferencia = await obtenerPeriodosReferencia();
 
   const docentesOptions = docentes.map(d =>
     `<option value="${d.id_docente}">${d.nombre}</option>`
   ).join('');
 
-  const cursosOptions = cursos.map(c =>
-    `<option value="${c.id_curso}">${c.nombre}</option>`
+  const carrerasOptions = CARRERAS_VALIDAS.map(carrera =>
+    `<option value="${carrera}">${carrera}</option>`
   ).join('');
-
-  const periodosLista = periodos.filter((p) => Number(p.activacion) !== 0);
-
-  const periodosOptions = periodosLista.map(p => {
-    const inicio = formatearFechaSimple(p.fecha_inicio);
-    const fin = formatearFechaSimple(p.fecha_fin);
-    const etiqueta = `${p.nombre} (${inicio} - ${fin})${Number(p.activacion) === 0 ? ' - INACTIVO' : ''}`;
-    return `<option value="${p.id_periodo}">${etiqueta}</option>`;
-  }).join('');
 
   const diasSemana = [
     { valor: 'Lunes', abreviatura: 'L' },
@@ -1994,11 +2447,23 @@ async function nuevoHorario() {
           </div>
 
           <div class="form-field form-col-2">
-            <label>Curso *</label>
-            <select id="swal-curso">
-              <option value="">Seleccionar curso</option>
-              ${cursosOptions}
+            <label>Carrera *</label>
+            <select id="swal-carrera">
+              <option value="">Seleccionar carrera</option>
+              ${carrerasOptions}
             </select>
+          </div>
+
+          <div class="form-field form-col-2">
+            <label>Curso *</label>
+            <select id="swal-curso" disabled>
+              <option value="">Seleccionar curso</option>
+            </select>
+          </div>
+
+          <div class="form-field form-half">
+            <label>Turno</label>
+            <input id="swal-turno" type="text" disabled>
           </div>
 
           <!-- SELECTOR DE DÍAS MÚLTIPLE MEJORADO -->
@@ -2028,13 +2493,21 @@ async function nuevoHorario() {
             </div>
           </div>
 
-          <div class="form-field">
-            <label>Periodo *</label>
-            <select id="swal-periodo">
-              <option value="">Seleccionar periodo</option>
-              ${periodosOptions}
-            </select>
+          <div class="form-field form-half">
+            <label>Inicio del curso</label>
+            <input id="swal-periodo-inicio" type="date" disabled>
           </div>
+
+          <div class="form-field form-half">
+            <label>Fin del curso</label>
+            <input id="swal-periodo-fin" type="date" disabled>
+          </div>
+
+          <div class="form-field form-col-2">
+            <div id="swal-periodo-ayuda" class="form-help">Selecciona un curso para ver sus fechas.</div>
+          </div>
+
+          <input id="swal-periodo-id" type="hidden">
 
           <div class="form-field form-recuperacion-inline">
             <label>Recuperación</label>
@@ -2054,20 +2527,85 @@ async function nuevoHorario() {
         input.addEventListener('change', () => sincronizarBotonesAMPM(id));
         sincronizarBotonesAMPM(id);
       });
+
+      const carreraSelect = document.getElementById('swal-carrera');
+      const cursoSelect = document.getElementById('swal-curso');
+      const turnoInput = document.getElementById('swal-turno');
+      const periodoInicio = document.getElementById('swal-periodo-inicio');
+      const periodoFin = document.getElementById('swal-periodo-fin');
+      const periodoId = document.getElementById('swal-periodo-id');
+      const periodoAyuda = document.getElementById('swal-periodo-ayuda');
+      const mensajeBase = 'Selecciona una carrera y un curso para ver sus fechas.';
+      const mensajeSinPeriodo = 'Este curso no tiene fechas de periodo registradas.';
+
+      const actualizarCursosPorCarrera = () => {
+        const carrera = carreraSelect?.value || '';
+        const cursosFiltrados = obtenerCursosPorCarrera(carrera)
+          .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+        if (cursoSelect) {
+          const opciones = cursosFiltrados.map(curso =>
+            `<option value="${curso.id_curso}">${curso.nombre}</option>`
+          ).join('');
+          cursoSelect.innerHTML = `<option value="">Seleccionar curso</option>${opciones}`;
+          cursoSelect.disabled = cursosFiltrados.length === 0;
+        }
+
+        actualizarPeriodoPorCurso();
+      };
+
+      const actualizarPeriodoPorCurso = () => {
+        const idCurso = Number(cursoSelect?.value || 0);
+        if (!idCurso) {
+          if (periodoInicio) periodoInicio.value = '';
+          if (periodoFin) periodoFin.value = '';
+          if (periodoId) periodoId.value = '';
+          if (turnoInput) turnoInput.value = '';
+          if (periodoAyuda) periodoAyuda.textContent = mensajeBase;
+          return;
+        }
+
+        const curso = obtenerCursoPorId(idCurso);
+        if (turnoInput) turnoInput.value = formatearTurnoLabel(curso?.turno) || '';
+        const periodo = curso ? obtenerPeriodoPorCurso(curso, periodosReferencia) : null;
+
+        if (!periodo) {
+          if (periodoInicio) periodoInicio.value = '';
+          if (periodoFin) periodoFin.value = '';
+          if (periodoId) periodoId.value = '';
+          if (periodoAyuda) periodoAyuda.textContent = mensajeSinPeriodo;
+          return;
+        }
+
+        if (periodoInicio) periodoInicio.value = formatearFechaSimple(periodo.fecha_inicio);
+        if (periodoFin) periodoFin.value = formatearFechaSimple(periodo.fecha_fin);
+        if (periodoId) periodoId.value = periodo.id_periodo || '';
+        if (periodoAyuda) periodoAyuda.textContent = '';
+      };
+
+      if (carreraSelect) {
+        carreraSelect.addEventListener('change', actualizarCursosPorCarrera);
+      }
+      if (cursoSelect) {
+        cursoSelect.addEventListener('change', actualizarPeriodoPorCurso);
+      }
+      actualizarCursosPorCarrera();
     },
     preConfirm: () => {
       const popup = Swal.getPopup();
       const id_docente = Number(popup.querySelector('#swal-docente').value);
+      const carrera = popup.querySelector('#swal-carrera').value;
       const id_curso = Number(popup.querySelector('#swal-curso').value);
       const hora_inicio = popup.querySelector('#swal-inicio').value;
       const hora_fin = popup.querySelector('#swal-fin').value;
-      const id_periodo = Number(popup.querySelector('#swal-periodo').value);
+      const id_periodo = Number(popup.querySelector('#swal-periodo-id').value);
       const es_recuperacion = popup.querySelector('#swal-es-recuperacion').checked;
 
       const selectedDays = Array.from(popup.querySelectorAll('.day-option:checked'))
         .map(input => input.value);
 
       if (!id_docente || isNaN(id_docente) ||
+          !esCarreraValida(carrera) ||
           !id_curso || isNaN(id_curso) ||
           selectedDays.length === 0 || // Validar selección múltiple
           !hora_inicio || !hora_fin ||
@@ -2143,6 +2681,7 @@ async function editarHorario(
   if (docentes.length === 0) await cargarDocentes();
   if (cursos.length === 0) await cargarCursos();
   if (periodos.length === 0) await cargarPeriodos();
+  const periodosReferencia = await obtenerPeriodosReferencia();
 
   const docentesActivos = docentes.filter((d) => Number(d.activacion) !== 0);
   const docentesLista = [...docentesActivos];
@@ -2163,24 +2702,11 @@ async function editarHorario(
     if (cursoActual) cursosLista.push(cursoActual);
   }
 
-  const cursosOptions = cursosLista.map((c) => {
-    const etiqueta = Number(c.activacion) === 0 ? `${c.nombre} (INACTIVO)` : c.nombre;
-    return `<option value="${c.id_curso}">${etiqueta}</option>`;
-  }).join('');
-
-  const periodosActivos = periodos.filter((p) => Number(p.activacion) !== 0);
-  const periodosLista = [...periodosActivos];
-  if (id_periodo_actual && !periodosLista.some((p) => Number(p.id_periodo) === Number(id_periodo_actual))) {
-    const periodoActual = periodos.find((p) => Number(p.id_periodo) === Number(id_periodo_actual));
-    if (periodoActual) periodosLista.push(periodoActual);
-  }
-
-  const periodosOptions = periodosLista.map(p => {
-    const inicio = formatearFechaSimple(p.fecha_inicio);
-    const fin = formatearFechaSimple(p.fecha_fin);
-    const etiqueta = `${p.nombre} (${inicio} - ${fin})${Number(p.activacion) === 0 ? ' - INACTIVO' : ''}`;
-    return `<option value="${p.id_periodo}">${etiqueta}</option>`;
-    }).join('');
+  const cursoActual = obtenerCursoPorId(id_curso_actual);
+  const carreraActual = esCarreraValida(cursoActual?.carrera) ? normalizarCodigo(cursoActual.carrera) : '';
+  const carrerasOptions = CARRERAS_VALIDAS.map(carrera =>
+    `<option value="${carrera}">${carrera}</option>`
+  ).join('');
 
   const puedeReactivar = Number(estado_actual) === 0;
   const { value: formValues } = await Swal.fire({
@@ -2198,8 +2724,19 @@ async function editarHorario(
             <select id="swal-docente">${docentesOptions}</select>
           </div>
           <div class="form-field form-col-2">
+            <label>Carrera *</label>
+            <select id="swal-carrera">
+              <option value="">Seleccionar carrera</option>
+              ${carrerasOptions}
+            </select>
+          </div>
+          <div class="form-field form-col-2">
             <label>Curso *</label>
-            <select id="swal-curso">${cursosOptions}</select>
+            <select id="swal-curso"></select>
+          </div>
+          <div class="form-field form-half">
+            <label>Turno</label>
+            <input id="swal-turno" type="text" disabled>
           </div>
           <div class="form-field form-col-2">
             <label>Día *</label>
@@ -2225,13 +2762,21 @@ async function editarHorario(
             </div>
           </div>
 
-          <div class="form-field">
-            <label>Periodo *</label>
-            <select id="swal-periodo">
-              <option value="">Seleccionar periodo</option>
-              ${periodosOptions}
-            </select>
+          <div class="form-field form-half">
+            <label>Inicio del curso</label>
+            <input id="swal-periodo-inicio" type="date" disabled>
           </div>
+
+          <div class="form-field form-half">
+            <label>Fin del curso</label>
+            <input id="swal-periodo-fin" type="date" disabled>
+          </div>
+
+          <div class="form-field form-col-2">
+            <div id="swal-periodo-ayuda" class="form-help">Selecciona un curso para ver sus fechas.</div>
+          </div>
+
+          <input id="swal-periodo-id" type="hidden">
 
           <div class="form-field form-recuperacion-inline">
             <label>Recuperación</label>
@@ -2254,13 +2799,81 @@ async function editarHorario(
     `,
     didOpen: () => {
       document.getElementById('swal-docente').value = id_docente_actual;
-      document.getElementById('swal-curso').value = id_curso_actual;
       document.getElementById('swal-dia').value = dia_actual;
-      document.getElementById('swal-periodo').value = id_periodo_actual || '';
       document.getElementById('swal-es-recuperacion').checked = !!es_recuperacion_actual;
       if (puedeReactivar) {
         sincronizarToggleModal('swal-horario-activo');
       }
+      const carreraSelect = document.getElementById('swal-carrera');
+      const cursoSelect = document.getElementById('swal-curso');
+      const turnoInput = document.getElementById('swal-turno');
+      const periodoInicio = document.getElementById('swal-periodo-inicio');
+      const periodoFin = document.getElementById('swal-periodo-fin');
+      const periodoId = document.getElementById('swal-periodo-id');
+      const periodoAyuda = document.getElementById('swal-periodo-ayuda');
+      const mensajeBase = 'Selecciona una carrera y un curso para ver sus fechas.';
+      const mensajeSinPeriodo = 'Este curso no tiene fechas de periodo registradas.';
+
+      if (carreraSelect && carreraActual) {
+        carreraSelect.value = carreraActual;
+      }
+
+      const actualizarCursosPorCarrera = (mantenerSeleccion) => {
+        const carrera = carreraSelect?.value || '';
+        const cursosFiltrados = obtenerCursosPorCarrera(carrera, cursosLista)
+          .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+        if (cursoSelect) {
+          const opciones = cursosFiltrados.map((curso) => {
+            const etiqueta = Number(curso.activacion) === 0 ? `${curso.nombre} (INACTIVO)` : curso.nombre;
+            return `<option value="${curso.id_curso}">${etiqueta}</option>`;
+          }).join('');
+          cursoSelect.innerHTML = `<option value="">Seleccionar curso</option>${opciones}`;
+          if (mantenerSeleccion && id_curso_actual) {
+            cursoSelect.value = id_curso_actual;
+          }
+        }
+
+        actualizarPeriodoPorCurso(true);
+      };
+
+      const actualizarPeriodoPorCurso = (permitirFallback) => {
+        const idCurso = Number(cursoSelect?.value || 0);
+        let periodo = null;
+
+        if (idCurso) {
+          const curso = obtenerCursoPorId(idCurso);
+          if (turnoInput) turnoInput.value = formatearTurnoLabel(curso?.turno) || '';
+          periodo = curso ? obtenerPeriodoPorCurso(curso, periodosReferencia) : null;
+        } else if (turnoInput) {
+          turnoInput.value = '';
+        }
+
+        if (!periodo && permitirFallback && id_periodo_actual) {
+          periodo = obtenerPeriodoPorId(id_periodo_actual, periodosReferencia);
+        }
+
+        if (!periodo) {
+          if (periodoInicio) periodoInicio.value = '';
+          if (periodoFin) periodoFin.value = '';
+          if (periodoId) periodoId.value = '';
+          if (periodoAyuda) periodoAyuda.textContent = idCurso ? mensajeSinPeriodo : mensajeBase;
+          return;
+        }
+
+        if (periodoInicio) periodoInicio.value = formatearFechaSimple(periodo.fecha_inicio);
+        if (periodoFin) periodoFin.value = formatearFechaSimple(periodo.fecha_fin);
+        if (periodoId) periodoId.value = periodo.id_periodo || '';
+        if (periodoAyuda) periodoAyuda.textContent = '';
+      };
+
+      if (carreraSelect) {
+        carreraSelect.addEventListener('change', () => actualizarCursosPorCarrera(false));
+      }
+      if (cursoSelect) {
+        cursoSelect.addEventListener('change', () => actualizarPeriodoPorCurso(false));
+      }
+      actualizarCursosPorCarrera(true);
       // Inicializar botones AM/PM según la hora cargada
       ['swal-inicio', 'swal-fin'].forEach(id => {
         const input = document.getElementById(id);
@@ -2271,19 +2884,24 @@ async function editarHorario(
     },
     preConfirm: () => {
       const id_docente = Number(document.getElementById('swal-docente').value);
+      const carrera = document.getElementById('swal-carrera').value;
       const id_curso = Number(document.getElementById('swal-curso').value);
       const dia = document.getElementById('swal-dia').value;
       const hora_inicio = document.getElementById('swal-inicio').value;
       const hora_fin = document.getElementById('swal-fin').value;
 
-      const id_periodo = Number(document.getElementById('swal-periodo').value);
+      const idPeriodoInput = document.getElementById('swal-periodo-id').value;
+      const idPeriodoParsed = Number(idPeriodoInput);
+      const idPeriodoActual = Number(id_periodo_actual);
+      const id_periodo = Number.isFinite(idPeriodoParsed) && idPeriodoParsed > 0
+        ? idPeriodoParsed
+        : (Number.isFinite(idPeriodoActual) && idPeriodoActual > 0 ? idPeriodoActual : null);
       const es_recuperacion = document.getElementById('swal-es-recuperacion').checked;
       const activacion = puedeReactivar
         ? obtenerValorToggle('swal-horario-activo')
         : (Number(estado_actual) !== 0 ? 1 : 0);
 
-      if (!id_docente || !id_curso || !dia || !hora_inicio || !hora_fin ||
-          !id_periodo || isNaN(id_periodo)) {
+      if (!id_docente || !esCarreraValida(carrera) || !id_curso || !dia || !hora_inicio || !hora_fin) {
         Swal.showValidationMessage('Todos los campos son obligatorios');
         return false;
       }
@@ -2536,8 +3154,30 @@ function renderizarReportes() {
 
   const base = vistaCompleta.reportes ? docentes : docentes.filter((doc) => Number(doc.activacion) !== 0);
 
+  const obtenerResumenHorariosDocente = (idDocente, incluirInactivos = false) => {
+    const baseHorarios = Array.isArray(horarios) ? horarios : [];
+    const filtrados = baseHorarios.filter((h) => Number(h.id_docente) === Number(idDocente));
+    const visibles = incluirInactivos
+      ? filtrados
+      : filtrados.filter((h) => Number(h.activacion) !== 0 && Number(h.activacion_curso) !== 0 && Number(h.activacion_docente) !== 0);
+
+    const carreras = new Set();
+    const turnos = new Set();
+
+    visibles.forEach((h) => {
+      const carrera = normalizarCodigo(h.carrera);
+      if (carrera) carreras.add(carrera);
+      const turnoLabel = formatearTurnoLabel(h.turno);
+      if (turnoLabel) turnos.add(turnoLabel);
+    });
+
+    const carrerasTexto = carreras.size ? Array.from(carreras).sort().join(', ') : 'Sin carrera';
+    const turnosTexto = turnos.size ? Array.from(turnos).sort().join(', ') : 'No especificado';
+    return { carrerasTexto, turnosTexto };
+  };
+
   if (base.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">No hay docentes activos para reportes</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">No hay docentes activos para reportes</td></tr>';
     renderizarControlesPaginacion('reportes', obtenerMetaPaginacionVacia('reportes'));
     return;
   }
@@ -2547,12 +3187,15 @@ function renderizarReportes() {
     ? base.filter((doc) => {
         const nombre = normalizarTexto(doc.nombre);
         const dni = normalizarTexto(doc.dni);
-        return nombre.includes(filtro) || dni.includes(filtro);
+        const resumen = obtenerResumenHorariosDocente(doc.id_docente || doc.idDocente || doc.id, vistaCompleta.reportes);
+        const carreraTxt = normalizarTexto(resumen.carrerasTexto);
+        const turnoTxt = normalizarTexto(resumen.turnosTexto);
+        return nombre.includes(filtro) || dni.includes(filtro) || carreraTxt.includes(filtro) || turnoTxt.includes(filtro);
       })
     : base;
 
   if (lista.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">No se encontraron docentes para la búsqueda.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">No se encontraron docentes para la búsqueda.</td></tr>';
     renderizarControlesPaginacion('reportes', obtenerMetaPaginacionVacia('reportes'));
     return;
   }
@@ -2569,10 +3212,13 @@ function renderizarReportes() {
   const { items, meta } = paginarLista(ordenados, 'reportes');
   tbody.innerHTML = items.map((doc) => {
     const extraClase = Number(doc.activacion) === 0 ? 'class="is-inactive"' : '';
+    const resumen = obtenerResumenHorariosDocente(doc.id_docente || doc.idDocente || doc.id, vistaCompleta.reportes);
     return `
       <tr ${extraClase}>
         <td>${doc.nombre}</td>
         <td>${doc.dni}</td>
+        <td>${sanitizeHtml(resumen.carrerasTexto)}</td>
+        <td>${sanitizeHtml(resumen.turnosTexto)}</td>
         <td style="text-align:center;">
           <button class="btn-success btn-excel" onclick="mostrarPreviewReporte('${doc.dni}', '${doc.nombre.replace(/'/g, "\\'")}')">
             <i class="fa-solid fa-eye"></i> Vista previa

@@ -19,6 +19,8 @@ const DEFAULT_REPORTS_PATH = path.join(ROOT_PATH, "reportes");
 const DEFAULT_SEMESTRES_PATH = path.join(ROOT_PATH, "semestres");
 const REPORTS_BASE_PATH = resolveBasePath(process.env.REPORTS_PATH, DEFAULT_REPORTS_PATH);
 const SEMESTRES_BASE_PATH = resolveBasePath(process.env.SEMESTRES_PATH, DEFAULT_SEMESTRES_PATH);
+const PERIODO_JOIN = "LEFT JOIN periodos p ON h.id_periodo = p.id_periodo";
+const PERIODO_ACTIVO_WHERE = "(h.id_periodo IS NULL OR (p.activacion = 1 AND p.fecha_inicio <= CURDATE() AND p.fecha_fin >= CURDATE()))";
 
 function ensureDirectory(dir, label) {
   if (!fs.existsSync(dir)) {
@@ -46,9 +48,10 @@ app.use("/reportes", express.static(PUBLIC_REPORTS_PATH));
 const ADMIN_STREAM_KEEP_ALIVE_MS = 30 * 1000;
 const adminStreamClients = new Map();
 let adminStreamClientSeq = 1;
-const LIMPIEZA_PERIODOS_INTERVALO_MS = 60 * 60 * 1000; // Revisar periodos cada hora
+const LIMPIEZA_PERIODOS_INTERVALO_MS = 60 * 1000; // Revisar periodos cada minuto
 let limpiezaPeriodosEnCurso = false;
 let ultimaGeneracionMensual = null;
+const MARCADOR_REPORTES_MENSUALES = ".reportes_mensuales_generados";
 
 function broadcastAdminRefresh(origin = "unknown", extra = {}) {
   if (!adminStreamClients.size) return;
@@ -171,10 +174,53 @@ function normalizarFechaSQL(valor) {
   return null;
 }
 
+function formatearFechaLocalSQL(fecha) {
+  if (!(fecha instanceof Date) || Number.isNaN(fecha.getTime())) return null;
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+}
+
+function parseFechaLocal(valor) {
+  if (!valor) return null;
+  if (valor instanceof Date) {
+    return new Date(valor.getFullYear(), valor.getMonth(), valor.getDate());
+  }
+  const texto = String(valor);
+  const base = texto.includes("T") ? texto.slice(0, 10) : texto;
+  const partes = base.split("-").map(Number);
+  if (partes.length !== 3 || partes.some((n) => Number.isNaN(n))) return null;
+  const [anio, mes, dia] = partes;
+  return new Date(anio, mes - 1, dia);
+}
+
+function normalizarFechaLocalSQL(valor) {
+  const fecha = parseFechaLocal(valor);
+  return fecha ? formatearFechaLocalSQL(fecha) : null;
+}
+
 function parseActivacion(valor) {
   if (valor === null || typeof valor === "undefined") return undefined;
   if (typeof valor === "string" && valor.trim() === "") return undefined;
   return Number(valor) ? 1 : 0;
+}
+
+const CARRERAS_VALIDAS = new Set(["CAT", "INSTITUTO", "SECRETARIADO"]);
+const TURNOS_VALIDOS = new Set(["M", "T", "N", "SIN"]);
+
+function normalizarCodigo(valor) {
+  if (valor === null || typeof valor === "undefined") return "";
+  return String(valor).trim().toUpperCase();
+}
+
+function validarCarreraTurno(carrera, turno) {
+  const carreraFinal = normalizarCodigo(carrera);
+  const turnoFinal = normalizarCodigo(turno);
+  if (!CARRERAS_VALIDAS.has(carreraFinal) || !TURNOS_VALIDOS.has(turnoFinal)) {
+    return null;
+  }
+  return { carrera: carreraFinal, turno: turnoFinal };
 }
 
 async function obtenerFechaHoraServidor() {
@@ -224,7 +270,7 @@ app.get("/api/cursos", async (req, res) => {
     const mostrarTodos = incluirInactivos(req);
     const condicion = mostrarTodos ? "" : "WHERE activacion = 1";
     const [rows] = await db.query(`
-      SELECT id_curso, nombre, activacion
+      SELECT id_curso, nombre, carrera, turno, activacion
       FROM cursos
       ${condicion}
       ORDER BY nombre
@@ -263,6 +309,7 @@ app.get("/api/horarios", async (req, res) => {
       condiciones.push("h.activacion = 1");
       condiciones.push("d.activacion = 1");
       condiciones.push("c.activacion = 1");
+      condiciones.push(PERIODO_ACTIVO_WHERE);
     }
     const whereClause = condiciones.length ? `WHERE ${condiciones.join(" AND ")}` : "";
 
@@ -273,6 +320,8 @@ app.get("/api/horarios", async (req, res) => {
         d.dni AS docente_dni,
         h.id_curso,
         c.nombre AS curso,
+        c.carrera AS carrera,
+        c.turno AS turno,
         h.dia,
         h.hora_inicio,
         h.hora_fin,
@@ -281,6 +330,7 @@ app.get("/api/horarios", async (req, res) => {
         d.activacion AS activacion_docente,
         c.activacion AS activacion_curso
       FROM horarios h
+      ${PERIODO_JOIN}
       JOIN docentes d ON h.id_docente = d.id_docente
       JOIN cursos c ON h.id_curso = c.id_curso
       ${whereClause}
@@ -406,10 +456,12 @@ app.get("/api/asistencia-activa/:dni", async (req, res) => {
 async function registrarFaltasHastaAhora(id_docente, diaHoy, minActual) {
   // Obtener horarios del día
   const [horarios] = await db.query(`
-    SELECT id_curso, hora_inicio, hora_fin, es_recuperacion
-    FROM horarios
-    WHERE id_docente = ? AND dia = ? AND activacion = 1
-    ORDER BY hora_inicio
+    SELECT h.id_curso, h.hora_inicio, h.hora_fin, h.es_recuperacion
+    FROM horarios h
+    ${PERIODO_JOIN}
+    WHERE h.id_docente = ? AND h.dia = ? AND h.activacion = 1
+      AND ${PERIODO_ACTIVO_WHERE}
+    ORDER BY h.hora_inicio
   `, [id_docente, diaHoy]);
 
   if (!horarios.length) return 0;
@@ -472,10 +524,12 @@ async function registrarFaltasHastaAhora(id_docente, diaHoy, minActual) {
 async function registrarFaltasAntesDelCurso(id_docente, diaHoy, idCursoObjetivo) {
   // Obtener horarios del día
   const [horarios] = await db.query(`
-    SELECT id_curso, hora_inicio, hora_fin, es_recuperacion
-    FROM horarios
-    WHERE id_docente = ? AND dia = ? AND activacion = 1
-    ORDER BY hora_inicio
+    SELECT h.id_curso, h.hora_inicio, h.hora_fin, h.es_recuperacion
+    FROM horarios h
+    ${PERIODO_JOIN}
+    WHERE h.id_docente = ? AND h.dia = ? AND h.activacion = 1
+      AND ${PERIODO_ACTIVO_WHERE}
+    ORDER BY h.hora_inicio
   `, [id_docente, diaHoy]);
 
   if (!horarios.length) return 0;
@@ -528,10 +582,12 @@ async function registrarFaltasAntesDelCurso(id_docente, diaHoy, idCursoObjetivo)
 // Procesa las faltas automáticas de un docente puntual para reutilizar la lógica
 async function registrarFaltasAutomaticasDocente(id_docente, diaHoy, minActual) {
   const [horarios] = await db.query(`
-    SELECT id_curso, hora_inicio, hora_fin, es_recuperacion
-    FROM horarios
-    WHERE id_docente = ? AND dia = ? AND activacion = 1
-    ORDER BY hora_inicio
+    SELECT h.id_curso, h.hora_inicio, h.hora_fin, h.es_recuperacion
+    FROM horarios h
+    ${PERIODO_JOIN}
+    WHERE h.id_docente = ? AND h.dia = ? AND h.activacion = 1
+      AND ${PERIODO_ACTIVO_WHERE}
+    ORDER BY h.hora_inicio
   `, [id_docente, diaHoy]);
 
   if (!horarios.length) {
@@ -677,7 +733,168 @@ async function registrarFaltasAutomaticasDocente(id_docente, diaHoy, minActual) 
     }
   }
 
+  if (faltasRegistradas > 0 && docenteInfo?.dni) {
+    await db.query(`
+      UPDATE bloqueados
+      SET activo = FALSE
+      WHERE dni = ? AND tipo = 'entrada' AND activo = TRUE
+    `, [docenteInfo.dni]);
+  }
+
   return { faltasRegistradas, teniaHorarios: true, categorias: categoriasFaltas, etiquetaDocente };
+}
+
+let ultimaFechaFaltasHistoricas = null;
+
+async function registrarFaltasHistoricasDocente(id_docente, fechaHoyLocal, fechaAyerLocal) {
+  const fechaHoyStr = formatearFechaLocalSQL(fechaHoyLocal);
+  const fechaAyerStr = formatearFechaLocalSQL(fechaAyerLocal);
+  if (!fechaHoyStr || !fechaAyerStr) {
+    return { faltasRegistradas: 0, teniaHorarios: false };
+  }
+
+  const [horarios] = await db.query(`
+    SELECT h.id_curso, h.dia, h.hora_inicio, h.hora_fin, h.es_recuperacion,
+           p.fecha_inicio, p.fecha_fin
+    FROM horarios h
+    INNER JOIN periodos p ON h.id_periodo = p.id_periodo
+    WHERE h.id_docente = ?
+      AND h.activacion = 1
+      AND p.activacion = 1
+      AND p.fecha_inicio <= ?
+  `, [id_docente, fechaHoyStr]);
+
+  if (!horarios.length) {
+    return { faltasRegistradas: 0, teniaHorarios: false };
+  }
+
+  let rangoInicio = null;
+  let rangoFin = null;
+
+  for (const horario of horarios) {
+    const inicioPeriodo = parseFechaLocal(horario.fecha_inicio);
+    const finPeriodo = parseFechaLocal(horario.fecha_fin);
+    if (!inicioPeriodo || !finPeriodo) continue;
+
+    if (!rangoInicio || inicioPeriodo < rangoInicio) {
+      rangoInicio = inicioPeriodo;
+    }
+
+    const finAjustado = finPeriodo < fechaAyerLocal ? finPeriodo : fechaAyerLocal;
+    if (!rangoFin || finAjustado > rangoFin) {
+      rangoFin = finAjustado;
+    }
+  }
+
+  if (!rangoInicio || !rangoFin || rangoFin < rangoInicio) {
+    return { faltasRegistradas: 0, teniaHorarios: true };
+  }
+
+  const rangoInicioStr = formatearFechaLocalSQL(rangoInicio);
+  const rangoFinStr = formatearFechaLocalSQL(rangoFin);
+  if (!rangoInicioStr || !rangoFinStr) {
+    return { faltasRegistradas: 0, teniaHorarios: true };
+  }
+
+  const [asistencias] = await db.query(`
+    SELECT id_curso, fecha
+    FROM asistencias
+    WHERE id_docente = ? AND fecha BETWEEN ? AND ?
+  `, [id_docente, rangoInicioStr, rangoFinStr]);
+
+  const asistenciasSet = new Set();
+  for (const asistencia of asistencias) {
+    const fechaStr = normalizarFechaLocalSQL(asistencia.fecha);
+    if (!fechaStr) continue;
+    asistenciasSet.add(`${fechaStr}|${asistencia.id_curso}`);
+  }
+
+  const diasSemana = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  let faltasRegistradas = 0;
+
+  for (const horario of horarios) {
+    const inicioPeriodo = parseFechaLocal(horario.fecha_inicio);
+    const finPeriodo = parseFechaLocal(horario.fecha_fin);
+    if (!inicioPeriodo || !finPeriodo) continue;
+
+    const inicioIter = inicioPeriodo > rangoInicio ? inicioPeriodo : rangoInicio;
+    const finIter = finPeriodo < rangoFin ? finPeriodo : rangoFin;
+    if (finIter < inicioIter) continue;
+
+    for (let fecha = new Date(inicioIter); fecha <= finIter; fecha.setDate(fecha.getDate() + 1)) {
+      if (diasSemana[fecha.getDay()] !== horario.dia) continue;
+      const fechaStr = formatearFechaLocalSQL(fecha);
+      const clave = `${fechaStr}|${horario.id_curso}`;
+      if (asistenciasSet.has(clave)) continue;
+
+      const minutosAusencia = convertirAMin(horario.hora_fin) - convertirAMin(horario.hora_inicio);
+
+      await db.query(`
+        INSERT INTO asistencias
+        (id_docente, id_curso, fecha, hora_entrada, hora_salida,
+         hora_entrada_prog, hora_salida_prog, minutos_observacion, es_recuperacion)
+        VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?)
+      `, [
+        id_docente,
+        horario.id_curso,
+        fechaStr,
+        horario.hora_inicio,
+        horario.hora_fin,
+        minutosAusencia,
+        horario.es_recuperacion ? 1 : 0,
+      ]);
+
+      asistenciasSet.add(clave);
+      faltasRegistradas++;
+    }
+  }
+
+  return { faltasRegistradas, teniaHorarios: true };
+}
+
+async function ejecutarFaltasHistoricasSiCorresponde(ahora) {
+  const fechaHoyLocal = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  const fechaHoyStr = formatearFechaLocalSQL(fechaHoyLocal);
+  if (!fechaHoyStr || ultimaFechaFaltasHistoricas === fechaHoyStr) {
+    return;
+  }
+
+  const fechaAyerLocal = new Date(fechaHoyLocal);
+  fechaAyerLocal.setDate(fechaAyerLocal.getDate() - 1);
+  ultimaFechaFaltasHistoricas = fechaHoyStr;
+
+  try {
+    const [docentesConHorario] = await db.query(`
+      SELECT DISTINCT h.id_docente
+      FROM horarios h
+      INNER JOIN periodos p ON h.id_periodo = p.id_periodo
+      WHERE h.activacion = 1
+        AND p.activacion = 1
+        AND p.fecha_inicio <= ?
+    `, [fechaHoyStr]);
+
+    if (!docentesConHorario.length) {
+      return;
+    }
+
+    let totalFaltas = 0;
+
+    for (const docente of docentesConHorario) {
+      const resultado = await registrarFaltasHistoricasDocente(
+        docente.id_docente,
+        fechaHoyLocal,
+        fechaAyerLocal
+      );
+      totalFaltas += resultado.faltasRegistradas || 0;
+    }
+
+    if (totalFaltas > 0) {
+      console.log(`🤖 Tarea histórica: ${totalFaltas} falta(s) registradas en días anteriores.`);
+      broadcastAdminRefresh("faltas:historicas", { total: totalFaltas });
+    }
+  } catch (err) {
+    console.error("💥 ERROR en faltas históricas:", err);
+  }
 }
 
 
@@ -688,48 +905,6 @@ app.post("/api/marcar-entrada", async (req, res) => {
 
     const [[doc]] = await db.query("SELECT id_docente, nombre FROM docentes WHERE dni=?", [dni]);
     if (!doc) return res.status(404).json({ error: "Docente no existe" });
-
-    // 🔥 PASO 1: VERIFICAR SI ESTÁ BLOQUEADO
-    const [[bloqueo]] = await db.query(`
-      SELECT id_bloqueo, motivo FROM bloqueados
-      WHERE dni = ? AND tipo = 'entrada' AND activo = TRUE
-      LIMIT 1
-    `, [dni]);
-    
-    if (bloqueo) {
-      // Verificar si tiene activación especial
-      const [[activacion]] = await db.query(`
-        SELECT id_activacion FROM activaciones_especiales
-        WHERE dni = ? AND tipo = 'entrada' AND usado = FALSE
-        ORDER BY fecha_creacion DESC
-        LIMIT 1
-      `, [dni]);
-      
-      if (activacion) {
-        // ✅ Tiene activación - marcar como usada Y desbloquear
-        await db.query(`
-          UPDATE activaciones_especiales
-          SET usado = TRUE, fecha_uso = NOW()
-          WHERE id_activacion = ?
-        `, [activacion.id_activacion]);
-        
-        // Desbloquear
-        await db.query(`
-          UPDATE bloqueados
-          SET activo = FALSE
-          WHERE id_bloqueo = ?
-        `, [bloqueo.id_bloqueo]);
-        
-        console.log(`✅ Activación especial (entrada) usada y bloqueo eliminado para ${dni} (${doc.nombre})`);
-        // 🔥 CONTINUAR CON EL FLUJO NORMAL - NO hacer return aquí
-      } else {
-        // ❌ No tiene activación - rechazar
-        return res.status(403).json({ 
-          error: "Acceso bloqueado por tardanza excesiva. Debe solicitar una activación especial en administración.",
-          bloqueado: true
-        });
-      }
-    }
 
     // Verificar si ya existe entrada sin salida (EXCLUYENDO FALTAS)
     const [[existeActiva]] = await db.query(`
@@ -750,10 +925,12 @@ app.post("/api/marcar-entrada", async (req, res) => {
     const diaHoy = dias[ahora.getDay()];
 
     const [horarios] = await db.query(`
-      SELECT id_curso, hora_inicio, hora_fin, es_recuperacion
-      FROM horarios
-      WHERE id_docente = ? AND dia = ? AND activacion = 1
-      ORDER BY hora_inicio
+      SELECT h.id_curso, h.hora_inicio, h.hora_fin, h.es_recuperacion
+      FROM horarios h
+      ${PERIODO_JOIN}
+      WHERE h.id_docente = ? AND h.dia = ? AND h.activacion = 1
+        AND ${PERIODO_ACTIVO_WHERE}
+      ORDER BY h.hora_inicio
     `, [doc.id_docente, diaHoy]);
 
     if (!horarios.length) {
@@ -821,50 +998,69 @@ app.post("/api/marcar-entrada", async (req, res) => {
 
     const inicioProg = convertirAMin(cursoParaEntrada.hora_inicio);
     const horaActual = ahora.toTimeString().slice(0, 8);
+    const tardanzaExcesiva = minActual > inicioProg + 30;
 
-    // 🔥 VALIDACIÓN CRÍTICA: Tardanza mayor a 30 minutos
+    const [[bloqueo]] = await db.query(`
+      SELECT id_bloqueo, motivo FROM bloqueados
+      WHERE dni = ? AND tipo = 'entrada' AND activo = TRUE
+      LIMIT 1
+    `, [dni]);
+
+    // Si hay un bloqueo viejo pero el curso actual esta dentro de tolerancia, desbloquear.
+    if (bloqueo && !tardanzaExcesiva) {
+      await db.query(`
+        UPDATE bloqueados
+        SET activo = FALSE
+        WHERE id_bloqueo = ?
+      `, [bloqueo.id_bloqueo]);
+      console.log(`Bloqueo de entrada limpiado para ${dni} (${doc.nombre}) - curso dentro de tolerancia`);
+    }
+
+    // 🔥 VALIDACION CRITICA: Tardanza mayor a 30 minutos
     let usoActivacionPorTardanza = false;
-    
-    if (minActual > inicioProg + 30) {
-      // Verificar si tiene activación especial para tardanza
+
+    if (tardanzaExcesiva) {
+      // Verificar si tiene activacion especial para tardanza
       const [[activacionTardanza]] = await db.query(`
         SELECT id_activacion FROM activaciones_especiales
         WHERE dni = ? AND tipo = 'entrada' AND usado = FALSE
         ORDER BY fecha_creacion DESC
         LIMIT 1
       `, [dni]);
-      
+
       if (activacionTardanza) {
-        // ✅ Tiene permiso especial - marcar como usado y CONTINUAR
+        // Tiene permiso especial - marcar como usado y continuar
         await db.query(`
           UPDATE activaciones_especiales
           SET usado = TRUE, fecha_uso = NOW()
           WHERE id_activacion = ?
         `, [activacionTardanza.id_activacion]);
-        
+
+        if (bloqueo) {
+          await db.query(`
+            UPDATE bloqueados
+            SET activo = FALSE
+            WHERE id_bloqueo = ?
+          `, [bloqueo.id_bloqueo]);
+        }
+
         usoActivacionPorTardanza = true;
-        console.log(`✅ Permiso de tardanza usado para ${dni} (${doc.nombre})`);
+        console.log(`Permiso de tardanza usado para ${dni} (${doc.nombre})`);
         // NO hacer return - continuar con el flujo normal de registro
       } else {
-        // ❌ NO tiene permiso - verificar si ya está bloqueado para evitar duplicados
-        const [[bloqueoExistente]] = await db.query(`
-          SELECT id_bloqueo FROM bloqueados
-          WHERE dni = ? AND tipo = 'entrada' AND activo = TRUE
-        `, [dni]);
-        
-        // Solo crear bloqueo si NO existe uno activo
-        if (!bloqueoExistente) {
+        // No tiene permiso - crear bloqueo si no existe uno activo
+        if (!bloqueo) {
           await db.query(`
             INSERT INTO bloqueados (dni, nombre, tipo, motivo)
             VALUES (?, ?, 'entrada', ?)
           `, [
-            dni, 
+            dni,
             doc.nombre,
             `Tardanza excesiva: ${minActual - inicioProg} minutos. Hora programada: ${cursoParaEntrada.hora_inicio}, Hora de intento: ${horaActual}`
           ]);
         }
-        
-        return res.status(403).json({ 
+
+        return res.status(403).json({
           error: "Tardanza excesiva (más de 30 minutos). Ha sido bloqueado. Debe acudir a administración para solicitar una activación especial.",
           bloqueado: true
         });
@@ -1085,10 +1281,12 @@ app.post("/api/marcar-salida", async (req, res) => {
     const minActual = ahora.getHours() * 60 + ahora.getMinutes();
     
     const [horarios] = await db.query(`
-      SELECT id_curso, hora_inicio, hora_fin, es_recuperacion
-      FROM horarios
-      WHERE id_docente = ? AND dia = ? AND activacion = 1
-      ORDER BY hora_inicio
+      SELECT h.id_curso, h.hora_inicio, h.hora_fin, h.es_recuperacion
+      FROM horarios h
+      ${PERIODO_JOIN}
+      WHERE h.id_docente = ? AND h.dia = ? AND h.activacion = 1
+        AND ${PERIODO_ACTIVO_WHERE}
+      ORDER BY h.hora_inicio
     `, [doc.id_docente, diaHoy]);
 
     const grupos = agruparCursosContinuos(horarios);
@@ -1360,26 +1558,49 @@ app.post("/api/marcar-salida", async (req, res) => {
         
         cursosRegistrados++;
       } else {
-        // No tiene entrada - crear entrada y salida
+        // No tiene entrada activa - verificar si ya existe un registro para evitar duplicados
         let horaSalidaCurso;
         let minutosObs = 0;
 
         if (esUltimoCursoACompletar) {
-          // Es el último curso del bloque a completar
+          // Es el ultimo curso del bloque a completar
           if (salidaReal > finCurso && salidaReal <= finCurso + 15) {
-            // ✅ CORREGIDO: Sale DESPUÉS del fin pero DENTRO de ventana (15min) - hora PROGRAMADA
+            // Sale despues del fin pero dentro de ventana - hora programada
             horaSalidaCurso = curso.hora_fin;
           } else if (salidaReal < finCurso) {
-            // Sale ANTES del fin - hora REAL
+            // Sale antes del fin - hora real
             horaSalidaCurso = horaSalida;
             minutosObs = finCurso - salidaReal;
           } else {
-            // Sale EXACTAMENTE a tiempo - hora PROGRAMADA
+            // Sale a tiempo - hora programada
             horaSalidaCurso = curso.hora_fin;
           }
         } else {
-          // No es el último - siempre hora programada
+          // No es el ultimo - siempre hora programada
           horaSalidaCurso = curso.hora_fin;
+        }
+
+        const [[asisExistente]] = await db.query(`
+          SELECT id_asistencia, hora_entrada, hora_salida, minutos_observacion
+          FROM asistencias
+          WHERE id_docente = ? AND fecha = CURDATE() AND id_curso = ?
+          LIMIT 1
+        `, [doc.id_docente, curso.id_curso]);
+
+        if (asisExistente) {
+          if (asisExistente.hora_entrada !== null && asisExistente.hora_salida === null) {
+            const minutosPrevios = Number(asisExistente.minutos_observacion) || 0;
+            await db.query(`
+              UPDATE asistencias
+              SET hora_salida = ?, minutos_observacion = ?
+              WHERE id_asistencia = ?
+            `, [horaSalidaCurso, minutosPrevios + minutosObs, asisExistente.id_asistencia]);
+            cursosRegistrados++;
+          } else if (asisExistente.hora_entrada !== null || asisExistente.hora_salida !== null) {
+            // Ya existe una asistencia completa (o parcial) para este curso
+            cursosRegistrados++;
+          }
+          continue;
         }
 
         const esRec = curso.es_recuperacion ? 1 : 0;
@@ -1517,14 +1738,17 @@ async function ejecutarFaltasAutomaticasProgramadas() {
 
   try {
     const ahora = await obtenerFechaHoraServidor();
+    await ejecutarFaltasHistoricasSiCorresponde(ahora);
     const dias = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
     const diaHoy = dias[ahora.getDay()];
     const minActual = ahora.getHours() * 60 + ahora.getMinutes();
 
     const [docentesConHorario] = await db.query(`
-      SELECT DISTINCT id_docente
-      FROM horarios
-      WHERE dia = ? AND activacion = 1
+      SELECT DISTINCT h.id_docente
+      FROM horarios h
+      ${PERIODO_JOIN}
+      WHERE h.dia = ? AND h.activacion = 1
+        AND ${PERIODO_ACTIVO_WHERE}
     `, [diaHoy]);
 
     if (!docentesConHorario.length) {
@@ -1836,8 +2060,44 @@ app.delete("/api/admin/docentes/:dni", async (req, res) => {
 // Cursos
 app.post("/api/admin/cursos", async (req, res) => {
   try {
-    const { nombre } = req.body;
-    await db.query("INSERT INTO cursos (nombre) VALUES (?)", [nombre]);
+    const { nombre, carrera, turno } = req.body;
+    const valores = validarCarreraTurno(carrera, turno);
+    const nombreFinal = typeof nombre === "string" ? nombre.trim() : "";
+
+    if (!nombreFinal || !valores) {
+      return res.status(400).json({ error: "Datos incompletos" });
+    }
+
+    const [[cursoExistente]] = await db.query(
+      "SELECT id_curso, activacion FROM cursos WHERE nombre = ? AND carrera = ? AND turno = ? LIMIT 1",
+      [nombreFinal, valores.carrera, valores.turno]
+    );
+
+    if (cursoExistente) {
+      if (Number(cursoExistente.activacion) === 0) {
+        await db.query("UPDATE cursos SET activacion = 1 WHERE id_curso = ?", [
+          cursoExistente.id_curso,
+        ]);
+        return respondWithAdminRefresh(res, "cursos:reactivate", {
+          ok: true,
+          existing: true,
+          reactivated: true,
+          id_curso: cursoExistente.id_curso,
+        });
+      }
+
+      return respondWithAdminRefresh(res, "cursos:exists", {
+        ok: true,
+        existing: true,
+        id_curso: cursoExistente.id_curso,
+      });
+    }
+
+    await db.query("INSERT INTO cursos (nombre, carrera, turno) VALUES (?, ?, ?)", [
+      nombreFinal,
+      valores.carrera,
+      valores.turno,
+    ]);
     return respondWithAdminRefresh(res, "cursos:create", { ok: true });
   } catch (err) {
     console.error(err);
@@ -1848,7 +2108,7 @@ app.post("/api/admin/cursos", async (req, res) => {
 app.put("/api/admin/cursos/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, activacion } = req.body;
+    const { nombre, carrera, turno, activacion } = req.body;
 
     const [[cursoExiste]] = await db.query(
       "SELECT id_curso FROM cursos WHERE id_curso = ? LIMIT 1",
@@ -1865,6 +2125,24 @@ app.put("/api/admin/cursos/:id", async (req, res) => {
     if (typeof nombre === "string" && nombre.trim()) {
       campos.push("nombre = ?");
       valores.push(nombre.trim());
+    }
+
+    if (typeof carrera !== "undefined") {
+      const carreraFinal = normalizarCodigo(carrera);
+      if (!carreraFinal || !CARRERAS_VALIDAS.has(carreraFinal)) {
+        return res.status(400).json({ error: "Carrera inválida" });
+      }
+      campos.push("carrera = ?");
+      valores.push(carreraFinal);
+    }
+
+    if (typeof turno !== "undefined") {
+      const turnoFinal = normalizarCodigo(turno);
+      if (!turnoFinal || !TURNOS_VALIDOS.has(turnoFinal)) {
+        return res.status(400).json({ error: "Turno inválido" });
+      }
+      campos.push("turno = ?");
+      valores.push(turnoFinal);
     }
 
     const estado = parseActivacion(activacion);
@@ -1903,14 +2181,40 @@ app.delete("/api/admin/cursos/:id", async (req, res) => {
 app.post("/api/admin/periodos", async (req, res) => {
   try {
     const { nombre, fecha_inicio, fecha_fin } = req.body;
+    const nombreFinal = typeof nombre === "string" ? nombre.trim() : "";
 
-    if (!nombre || !fecha_inicio || !fecha_fin) {
+    if (!nombreFinal || !fecha_inicio || !fecha_fin) {
       return res.status(400).json({ error: "Datos incompletos" });
+    }
+
+    const [[periodoExistente]] = await db.query(
+      "SELECT id_periodo, activacion FROM periodos WHERE nombre = ? AND fecha_inicio = ? AND fecha_fin = ? LIMIT 1",
+      [nombreFinal, fecha_inicio, fecha_fin]
+    );
+
+    if (periodoExistente) {
+      if (Number(periodoExistente.activacion) === 0) {
+        await db.query("UPDATE periodos SET activacion = 1 WHERE id_periodo = ?", [
+          periodoExistente.id_periodo,
+        ]);
+        return respondWithAdminRefresh(res, "periodos:reactivate", {
+          ok: true,
+          existing: true,
+          reactivated: true,
+          id_periodo: periodoExistente.id_periodo,
+        });
+      }
+
+      return respondWithAdminRefresh(res, "periodos:exists", {
+        ok: true,
+        existing: true,
+        id_periodo: periodoExistente.id_periodo,
+      });
     }
 
     await db.query(
       "INSERT INTO periodos (nombre, fecha_inicio, fecha_fin) VALUES (?, ?, ?)",
-      [nombre, fecha_inicio, fecha_fin]
+      [nombreFinal, fecha_inicio, fecha_fin]
     );
 
     return respondWithAdminRefresh(res, "periodos:create", { ok: true });
@@ -2027,15 +2331,33 @@ app.get("/api/admin/horarios-completos", async (req, res) => {
         d.dni AS docente_dni,
         h.id_curso,
         c.nombre AS curso,
+        c.carrera AS carrera,
+        c.turno AS turno,
         h.dia,
         h.hora_inicio,
         h.hora_fin,
         h.id_periodo,
         h.es_recuperacion,
         h.activacion,
+        p.fecha_inicio AS periodo_inicio,
+        p.fecha_fin AS periodo_fin,
+        p.activacion AS activacion_periodo,
         d.activacion AS activacion_docente,
-        c.activacion AS activacion_curso
+        c.activacion AS activacion_curso,
+        CASE
+          WHEN h.id_periodo IS NULL OR p.id_periodo IS NULL THEN 'sin_periodo'
+          WHEN p.activacion = 0 THEN 'inactivo'
+          WHEN p.fecha_inicio > CURDATE() THEN 'futuro'
+          WHEN p.fecha_fin < CURDATE() THEN 'vencido'
+          ELSE 'vigente'
+        END AS estado_periodo,
+        CASE
+          WHEN h.id_periodo IS NULL OR p.id_periodo IS NULL THEN 1
+          WHEN p.activacion = 1 AND p.fecha_inicio <= CURDATE() AND p.fecha_fin >= CURDATE() THEN 1
+          ELSE 0
+        END AS periodo_activo
       FROM horarios h
+      ${PERIODO_JOIN}
       JOIN docentes d ON h.id_docente = d.id_docente
       JOIN cursos c ON h.id_curso = c.id_curso
       ${whereClause}
@@ -2805,90 +3127,270 @@ app.get("/api/admin/reporte-excel/:dni", async (req, res) => {
   }
 });
 
+function obtenerNombreMes(anio, mes) {
+  const fechaReferencia = new Date(anio, mes - 1, 1);
+  return fechaReferencia.toLocaleString("es-ES", { month: "long" });
+}
+
+function obtenerCarpetaMensual(nombreMes, anio) {
+  return path.join(REPORTS_BASE_PATH, `${nombreMes}_${anio}`);
+}
+
+function obtenerMarcadorMensual(carpetaMensual) {
+  return path.join(carpetaMensual, MARCADOR_REPORTES_MENSUALES);
+}
+
+function escribirMarcadorMensual(rutaMarcador, motivo, tuvoErrores) {
+  const estado = tuvoErrores ? "con_errores" : "ok";
+  const contenido = [
+    `generado=${new Date().toISOString()}`,
+    `motivo=${motivo}`,
+    `estado=${estado}`,
+  ].join("\n");
+  fs.writeFileSync(rutaMarcador, contenido, "utf8");
+}
+
+async function generarReportesMensualesDelMes(anio, mes, motivo, opciones = {}) {
+  const { modo = "activos" } = opciones;
+  const anioNum = Number(anio);
+  const mesNum = Number(mes);
+  if (!Number.isFinite(anioNum) || !Number.isFinite(mesNum) || mesNum < 1 || mesNum > 12) {
+    return;
+  }
+
+  const nombreMes = obtenerNombreMes(anioNum, mesNum);
+  const etiquetaMes = `${nombreMes} ${anioNum}`;
+  const carpetaMensual = obtenerCarpetaMensual(nombreMes, anioNum);
+  const marcador = obtenerMarcadorMensual(carpetaMensual);
+
+  if (fs.existsSync(marcador)) {
+    console.log(`Reportes mensuales '${etiquetaMes}' ya generados. Se omite (${motivo}).`);
+    return;
+  }
+
+  if (!fs.existsSync(carpetaMensual)) {
+    fs.mkdirSync(carpetaMensual, { recursive: true });
+    console.log(`🆕 Carpeta mensual creada (${etiquetaMes}): ${carpetaMensual}`);
+  } else {
+    console.log(`ℹ️ Carpeta mensual existente (${etiquetaMes}): ${carpetaMensual}`);
+  }
+  const carpetaMensualRelativa = path.relative(ROOT_PATH, carpetaMensual);
+
+  const fechaInicioMes = new Date(anioNum, mesNum - 1, 1).toISOString().slice(0, 10);
+  const fechaFinMes = new Date(anioNum, mesNum, 0).toISOString().slice(0, 10);
+
+  let docentesMes = [];
+  if (modo === "asistencias") {
+    const [rows] = await db.query(`
+      SELECT DISTINCT a.id_docente, d.nombre, d.dni
+      FROM asistencias a
+      JOIN docentes d ON a.id_docente = d.id_docente
+      WHERE a.fecha >= ? AND a.fecha <= ?
+        AND COALESCE(a.activacion, 1) = 1
+    `, [fechaInicioMes, fechaFinMes]);
+    docentesMes = rows;
+  } else {
+    const [rows] = await db.query(
+      "SELECT id_docente, nombre, dni FROM docentes WHERE activacion = 1"
+    );
+    docentesMes = rows;
+  }
+
+  if (!docentesMes.length) {
+    const etiquetaVacia = modo === "asistencias" ? "sin-asistencias" : "sin-docentes";
+    console.log(`   - No se encontraron docentes para ${etiquetaMes} (${modo}).`);
+    escribirMarcadorMensual(marcador, `${motivo}-${etiquetaVacia}`, false);
+    return;
+  }
+
+  console.log(`   - Generando reportes mensuales para ${docentesMes.length} docentes en '${carpetaMensualRelativa}'.`);
+
+  let tuvoErrores = false;
+
+  for (const docente of docentesMes) {
+    try {
+      const nombreLimpio = String(docente.nombre || "").replace(/[^a-zA-Z0-9]/g, "_");
+      const slugDocente = nombreLimpio || docente.dni || `docente_${docente.id_docente}`;
+      const carpetaDocente = path.join(carpetaMensual, slugDocente);
+      if (!fs.existsSync(carpetaDocente)) {
+        fs.mkdirSync(carpetaDocente, { recursive: true });
+      }
+      const filename = `reporte_${slugDocente}.xlsx`;
+      const filePath = path.join(carpetaDocente, filename);
+
+      if (fs.existsSync(filePath)) {
+        continue;
+      }
+
+      const workbook = await crearWorkbookDocente(docente.id_docente, docente.nombre, docente.dni, {
+        fechaInicio: fechaInicioMes,
+        fechaFin: fechaFinMes,
+      });
+      await workbook.xlsx.writeFile(filePath);
+      console.log(`      • Reporte mensual guardado (${etiquetaMes}): ${path.relative(ROOT_PATH, filePath)}`);
+    } catch (errDoc) {
+      tuvoErrores = true;
+      console.error(`   ❌ Error generando reporte mensual para ${docente.nombre}:`, errDoc);
+    }
+  }
+
+  escribirMarcadorMensual(marcador, motivo, tuvoErrores);
+  if (tuvoErrores) {
+    console.log(`   - Reportes mensuales '${etiquetaMes}' generados con errores. Revisar logs.`);
+  }
+}
+
+async function sincronizarReportesMensualesPendientes({ motivo = "inicio-servidor" } = {}) {
+  try {
+    const ahora = await obtenerFechaHoraServidor();
+    const anioActual = ahora.getFullYear();
+    const mesActual = ahora.getMonth() + 1;
+
+    const [mesesPendientes] = await db.query(`
+      SELECT DISTINCT YEAR(a.fecha) AS anio, MONTH(a.fecha) AS mes
+      FROM asistencias a
+      WHERE COALESCE(a.activacion, 1) = 1
+      ORDER BY anio, mes
+    `);
+
+    if (!mesesPendientes.length) {
+      return;
+    }
+
+    console.log(`📆 Sincronizando reportes mensuales pendientes (${mesesPendientes.length} meses)...`);
+
+    for (const registro of mesesPendientes) {
+      if (registro.anio > anioActual || (registro.anio === anioActual && registro.mes >= mesActual)) {
+        continue;
+      }
+      await generarReportesMensualesDelMes(registro.anio, registro.mes, motivo, { modo: "asistencias" });
+    }
+  } catch (err) {
+    console.error("Error sincronizando reportes mensuales pendientes:", err);
+  }
+}
+
 /* ================= AUTOMATIZACIÓN DE REPORTES (FIN DE MES) ================= */
 async function revisarGeneracionAutomatica() {
-    try {
-        const now = await obtenerFechaHoraServidor();
-        // Verificar si es el día 1 del mes a las 23:00 (o el momento que definamos como fin de cierre)
-        // El requerimiento dice: "cada fin de mes". 
-        // Estrategia: Revisamos si mañana es dia 1. Si mañana es dia 1, hoy es fin de mes.
-        
-        const manana = new Date(now);
-        manana.setDate(manana.getDate() + 1);
-        
-        const esUltimoDia = manana.getDate() === 1;
-        const horaLimiteAlcanzada = now.getHours() >= 23; // toleramos 23:00 en adelante
-        const claveMes = `${now.getFullYear()}-${now.getMonth() + 1}`;
+  try {
+    const now = await obtenerFechaHoraServidor();
+    // Estrategia: Revisamos si mañana es día 1. Si mañana es día 1, hoy es fin de mes.
+    const manana = new Date(now);
+    manana.setDate(manana.getDate() + 1);
 
-        if (esUltimoDia && horaLimiteAlcanzada) {
-          if (ultimaGeneracionMensual === claveMes) {
-            return; // ya se ejecutó por este mes
-          }
+    const esUltimoDia = manana.getDate() === 1;
+    const horaLimiteAlcanzada = now.getHours() >= 23; // toleramos 23:00 en adelante
+    const claveMes = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
-          ultimaGeneracionMensual = claveMes;
-          console.log("🚀 Iniciando generación automática de reportes de fin de mes...");
-            
-            const mesAnterior = new Date(now); // Estamos en fin de mes, el reporte es de ESTE mes
-            const nombreMes = mesAnterior.toLocaleString('es-ES', { month: 'long' });
-            const anio = mesAnterior.getFullYear();
-            const nombreCarpeta = `${nombreMes}_${anio}`;
-            const fechaInicioMes = new Date(mesAnterior.getFullYear(), mesAnterior.getMonth(), 1)
-              .toISOString()
-              .slice(0, 10);
-            const fechaFinMes = new Date(mesAnterior.getFullYear(), mesAnterior.getMonth() + 1, 0)
-              .toISOString()
-              .slice(0, 10);
-
-            // 1. Crear carpeta mensual específica
-            const carpetaPath = path.join(REPORTS_BASE_PATH, nombreCarpeta);
-            if (!fs.existsSync(carpetaPath)){
-              fs.mkdirSync(carpetaPath, { recursive: true });
-              console.log(`🆕 Carpeta mensual creada (${nombreMes} ${anio}): ${carpetaPath}`);
-            } else {
-              console.log(`ℹ️ Carpeta mensual existente (${nombreMes} ${anio}): ${carpetaPath}`);
-            }
-            
-            // 2. Obtener todos los docentes activos
-            const [docentes] = await db.query("SELECT id_docente, nombre, dni FROM docentes WHERE activacion = 1");
-            
-            const carpetaRelativa = path.relative(ROOT_PATH, carpetaPath);
-            console.log(`📂 Generando reportes para ${docentes.length} docentes en: ${carpetaRelativa}`);
-            
-            for (const doc of docentes) {
-                try {
-                    const workbook = await crearWorkbookDocente(doc.id_docente, doc.nombre, doc.dni, {
-                      fechaInicio: fechaInicioMes,
-                      fechaFin: fechaFinMes,
-                    });
-                    const nombreLimpio = doc.nombre.replace(/[^a-zA-Z0-9]/g, "_");
-                    const slugDocente = nombreLimpio || doc.dni || `docente_${doc.id_docente}`;
-                    const carpetaDocente = path.join(carpetaPath, slugDocente);
-                    if (!fs.existsSync(carpetaDocente)) {
-                      fs.mkdirSync(carpetaDocente, { recursive: true });
-                    }
-                    const filename = `reporte_${slugDocente}.xlsx`;
-                    const filePath = path.join(carpetaDocente, filename);
-                    const carpetaDocenteRelativa = path.relative(ROOT_PATH, carpetaDocente);
-                    console.log(`   ↳ Preparando ${filename} (${doc.nombre}) en ${carpetaDocenteRelativa}`);
-
-                    await workbook.xlsx.writeFile(filePath);
-                    const relativeFilePath = path.relative(ROOT_PATH, filePath);
-                    console.log(`      • Reporte mensual guardado (${nombreMes} ${anio}): ${relativeFilePath}`);
-                } catch (errDoc) {
-                    console.error(`❌ Error generando reporte para ${doc.nombre}:`, errDoc);
-                }
-            }
-            console.log("🏁 Generación automática completada.");
-        }
-    } catch (err) {
-        console.error("Error en el proceso automático de reportes:", err);
+    if (!esUltimoDia || !horaLimiteAlcanzada) {
+      return;
     }
+
+    if (ultimaGeneracionMensual === claveMes) {
+      return; // ya se ejecutó por este mes
+    }
+
+    ultimaGeneracionMensual = claveMes;
+    console.log("🚀 Iniciando generación automática de reportes de fin de mes...");
+    await generarReportesMensualesDelMes(now.getFullYear(), now.getMonth() + 1, "fin-de-mes", { modo: "activos" });
+    console.log("🏁 Generación automática completada.");
+  } catch (err) {
+    console.error("Error en el proceso automático de reportes:", err);
+  }
 }
 
 // Revisar cada 1 minuto para mayor precisión (o cada hora si se prefiere)
 // Dado que buscamos 23:00 exacto, mejor cada minuto, o manejar intervalo amplio pero con check de "ya se ejcutó hoy".
 // Para simplicidad del ejemplo y evitar carga excesiva, checking cada 1 min es seguro en Node.
 setInterval(revisarGeneracionAutomatica, 60 * 1000); 
+
+
+const MARCADOR_REPORTES_PERIODO = ".reportes_periodo_generados";
+
+function obtenerCarpetaPeriodo(periodo) {
+  const nombreCarpeta = periodo && periodo.nombre
+    ? String(periodo.nombre).replace(/[^a-zA-Z0-9-_]/g, "_")
+    : `periodo_${periodo.id_periodo}`;
+  return path.join(SEMESTRES_BASE_PATH, nombreCarpeta);
+}
+
+function obtenerMarcadorReportesPeriodo(carpetaPeriodo) {
+  return path.join(carpetaPeriodo, MARCADOR_REPORTES_PERIODO);
+}
+
+function escribirMarcadorReportesPeriodo(rutaMarcador, motivo, tuvoErrores) {
+  const estado = tuvoErrores ? "con_errores" : "ok";
+  const contenido = [
+    `generado=${new Date().toISOString()}`,
+    `motivo=${motivo}`,
+    `estado=${estado}`,
+  ].join("\n");
+  fs.writeFileSync(rutaMarcador, contenido, "utf8");
+}
+
+async function generarReportesPeriodo(periodo, motivo) {
+  const nombrePeriodo = periodo && periodo.nombre
+    ? periodo.nombre
+    : `periodo_${periodo.id_periodo}`;
+  const carpetaPeriodo = obtenerCarpetaPeriodo(periodo);
+  const marcador = obtenerMarcadorReportesPeriodo(carpetaPeriodo);
+
+  if (fs.existsSync(marcador)) {
+    console.log(`Reportes del periodo '${nombrePeriodo}' ya generados. Se omite (${motivo}).`);
+    return;
+  }
+
+  if (!fs.existsSync(carpetaPeriodo)) {
+    fs.mkdirSync(carpetaPeriodo, { recursive: true });
+    console.log(`🆕 Carpeta creada para el periodo '${nombrePeriodo}': ${carpetaPeriodo}`);
+  } else {
+    console.log(`ℹ️ Carpeta reutilizada para el periodo '${nombrePeriodo}': ${carpetaPeriodo}`);
+  }
+  const carpetaPeriodoRelativa = path.relative(ROOT_PATH, carpetaPeriodo);
+
+  const fechaInicioSQL = normalizarFechaSQL(periodo.fecha_inicio);
+  const fechaFinSQL = normalizarFechaSQL(periodo.fecha_fin);
+
+  const [docentesPeriodo] = await db.query(`
+    SELECT DISTINCT h.id_docente, d.nombre, d.dni
+    FROM horarios h
+    JOIN docentes d ON h.id_docente = d.id_docente
+    WHERE h.id_periodo = ? AND d.activacion = 1
+  `, [periodo.id_periodo]);
+
+  if (!docentesPeriodo.length) {
+    console.log(`   - No se encontraron docentes asociados al periodo '${nombrePeriodo}'.`);
+    escribirMarcadorReportesPeriodo(marcador, `${motivo}-sin-docentes`, false);
+    return;
+  }
+
+  console.log(`   - Generando reportes del periodo para ${docentesPeriodo.length} docentes en '${carpetaPeriodo}'.`);
+
+  let tuvoErrores = false;
+
+  for (const docente of docentesPeriodo) {
+    try {
+      const workbook = await crearWorkbookDocente(docente.id_docente, docente.nombre, docente.dni, {
+        fechaInicio: fechaInicioSQL,
+        fechaFin: fechaFinSQL
+      });
+      const nombreLimpio = docente.nombre.replace(/[^a-zA-Z0-9]/g, "_");
+      const nombreArchivo = `reporte_${nombreLimpio || docente.id_docente}.xlsx`;
+      const destinoReporte = path.join(carpetaPeriodo, nombreArchivo);
+      console.log(`      ↳ Preparando ${nombreArchivo} (${docente.nombre}) dentro de ${carpetaPeriodoRelativa}`);
+      await workbook.xlsx.writeFile(destinoReporte);
+      console.log(`      • Reporte del periodo guardado (${nombrePeriodo}): ${path.relative(ROOT_PATH, destinoReporte)}`);
+    } catch (errDoc) {
+      tuvoErrores = true;
+      console.error(`   ❌ Error generando reporte del periodo para ${docente.nombre}:`, errDoc);
+    }
+  }
+
+  escribirMarcadorReportesPeriodo(marcador, motivo, tuvoErrores);
+  if (tuvoErrores) {
+    console.log(`   - Reportes del periodo '${nombrePeriodo}' generados con errores. Revisar logs.`);
+  }
+}
 
 
 /* ================= LIMPIEZA AUTOMÁTICA ================= */
@@ -2901,6 +3403,37 @@ async function limpiarPeriodosVencidos({ motivo = "manual" } = {}) {
   limpiezaPeriodosEnCurso = true;
 
   try {
+    const ahora = await obtenerFechaHoraServidor();
+    const minutosDelDia = ahora.getHours() * 60 + ahora.getMinutes();
+    const listoParaUltimoDia = minutosDelDia >= 23 * 60; // 23:00
+
+    const [resActivar] = await db.query(`
+      UPDATE horarios h
+      JOIN periodos p ON h.id_periodo = p.id_periodo
+      SET h.activacion = 1
+      WHERE h.activacion = 0
+        AND p.activacion = 1
+        AND p.fecha_inicio <= CURDATE()
+        AND p.fecha_fin >= CURDATE()
+    `);
+
+    if (resActivar.affectedRows > 0) {
+      console.log(`✅ Horarios activados por inicio de periodo: ${resActivar.affectedRows}.`);
+      broadcastAdminRefresh("horarios:activar-periodo", { total: resActivar.affectedRows });
+    }
+
+    if (listoParaUltimoDia) {
+      const [periodosUltimoDia] = await db.query(`
+        SELECT id_periodo, nombre, fecha_inicio, fecha_fin
+        FROM periodos
+        WHERE fecha_fin = CURDATE() AND activacion = 1
+      `);
+
+      for (const p of periodosUltimoDia) {
+        await generarReportesPeriodo(p, "ultimo-dia");
+      }
+    }
+
     // Obtener periodos vencidos cuyo fin ya pasó respecto al día actual
     const [periodos] = await db.query(`
       SELECT id_periodo, nombre, fecha_inicio, fecha_fin 
@@ -2915,6 +3448,7 @@ async function limpiarPeriodosVencidos({ motivo = "manual" } = {}) {
     console.log(`🧹 (${motivo}) Se limpiarán ${periodos.length} periodos vencidos.`);
 
     for (const p of periodos) {
+      await generarReportesPeriodo(p, "vencido");
       // 1. Desactivar horarios vinculados al periodo
       const [resHorarios] = await db.query("UPDATE horarios SET activacion = 0 WHERE id_periodo = ?", [p.id_periodo]);
       console.log(`   - Periodo '${p.nombre}' (Fin: ${p.fecha_fin}): Desactivados ${resHorarios.affectedRows} horarios.`);
@@ -2922,53 +3456,6 @@ async function limpiarPeriodosVencidos({ motivo = "manual" } = {}) {
       // 2. Desactivar el periodo mismo
       await db.query("UPDATE periodos SET activacion = 0 WHERE id_periodo = ?", [p.id_periodo]);
       console.log(`   - Periodo '${p.nombre}' desactivado correctamente.`);
-
-      // 3. Exportar asistencias del periodo y guardar en carpeta dedicada
-      const nombreCarpeta = p.nombre
-        ? p.nombre.replace(/[^a-zA-Z0-9-_]/g, "_")
-        : `periodo_${p.id_periodo}`;
-      const carpetaPeriodo = path.join(SEMESTRES_BASE_PATH, nombreCarpeta);
-      if (!fs.existsSync(carpetaPeriodo)) {
-        fs.mkdirSync(carpetaPeriodo, { recursive: true });
-        console.log(`🆕 Carpeta creada para el periodo '${p.nombre}': ${carpetaPeriodo}`);
-      } else {
-        console.log(`ℹ️ Carpeta reutilizada para el periodo '${p.nombre}': ${carpetaPeriodo}`);
-      }
-      const carpetaPeriodoRelativa = path.relative(ROOT_PATH, carpetaPeriodo);
-
-      const fechaInicioSQL = normalizarFechaSQL(p.fecha_inicio);
-      const fechaFinSQL = normalizarFechaSQL(p.fecha_fin);
-
-      const [docentesPeriodo] = await db.query(`
-        SELECT DISTINCT h.id_docente, d.nombre, d.dni
-        FROM horarios h
-        JOIN docentes d ON h.id_docente = d.id_docente
-        WHERE h.id_periodo = ? AND d.activacion = 1
-      `, [p.id_periodo]);
-
-      if (!docentesPeriodo.length) {
-        console.log(`   - No se encontraron docentes asociados al periodo '${p.nombre}'.`);
-        continue;
-      }
-
-      console.log(`   - Generando reportes del periodo para ${docentesPeriodo.length} docentes en '${carpetaPeriodo}'.`);
-
-      for (const docente of docentesPeriodo) {
-        try {
-          const workbook = await crearWorkbookDocente(docente.id_docente, docente.nombre, docente.dni, {
-            fechaInicio: fechaInicioSQL,
-            fechaFin: fechaFinSQL
-          });
-          const nombreLimpio = docente.nombre.replace(/[^a-zA-Z0-9]/g, "_");
-          const nombreArchivo = `reporte_${nombreLimpio || docente.id_docente}.xlsx`;
-          const destinoReporte = path.join(carpetaPeriodo, nombreArchivo);
-          console.log(`      ↳ Preparando ${nombreArchivo} (${docente.nombre}) dentro de ${carpetaPeriodoRelativa}`);
-          await workbook.xlsx.writeFile(destinoReporte);
-          console.log(`      • Reporte del periodo guardado (${p.nombre}): ${path.relative(ROOT_PATH, destinoReporte)}`);
-        } catch (errDoc) {
-          console.error(`   ❌ Error generando reporte del periodo para ${docente.nombre}:`, errDoc);
-        }
-      }
     }
 
     console.log("✅ Proceso de desactivación completado.");
@@ -2987,4 +3474,5 @@ app.listen(3000, () => {
   
   // Ejecutar limpieza al iniciar el servidor
   limpiarPeriodosVencidos({ motivo: "inicio-servidor" });
+  sincronizarReportesMensualesPendientes({ motivo: "inicio-servidor" });
 });

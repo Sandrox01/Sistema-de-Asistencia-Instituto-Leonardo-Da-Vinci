@@ -6,7 +6,12 @@ const TOLERANCIA_ENTRADA_MIN = 10;
 const LIMITE_TARDANZA = 30;
 const VENTANA_SALIDA_MIN = 15; // Ventana de 15 minutos después del último curso
 const DNI_ADMIN = "16769288";
-const BASE_URL = "http://localhost:3000";
+const API_HOST = (typeof window !== 'undefined' && window.location && window.location.hostname)
+    ? window.location.hostname
+    : 'localhost';
+const BASE_URL = (typeof window !== 'undefined' && window.location && window.location.port === '3000')
+    ? ''
+    : `http://${API_HOST}:3000`;
 
 let docenteActual = null;
 let asistenciasHoy = [];
@@ -17,6 +22,21 @@ let docentes = [];
 let desfaseServidorMs = 0;
 let ultimaSincronizacionServidor = 0;
 let relojIntervalId = null;
+
+function habilitarEnterEnBotones() {
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.repeat) return;
+        const target = event.target;
+        if (!target) return;
+        const esBoton = target.tagName === "BUTTON" || target.getAttribute("role") === "button";
+        if (!esBoton) return;
+        if (target.disabled || target.getAttribute("aria-disabled") === "true") return;
+        event.preventDefault();
+        target.click();
+    });
+}
+
+habilitarEnterEnBotones();
 
 async function sincronizarHoraServidor() {
     try {
@@ -289,6 +309,11 @@ function mostrarPanelDocente() {
 
     // Identificar cursos con asistencia (completados O con falta)
     const cursosConAsistencia = asistenciasHoy.map(a => a.id_curso);
+
+    // Identificar faltas (sin entrada ni salida)
+    const cursosConFalta = asistenciasHoy
+        .filter(a => a.hora_entrada === null && a.hora_salida === null)
+        .map(a => a.id_curso);
     
     // Identificar solo los completados (con hora_salida)
     const cursosCompletados = asistenciasHoy
@@ -361,7 +386,7 @@ function mostrarPanelDocente() {
         });
 
         if (cursosAMostrar.length === 0) {
-            mostrarCursosCompletadosYPendientes(grupos, cursosCompletados, lista);
+            mostrarCursosCompletadosYPendientes(grupos, cursosCompletados, cursosConAsistencia, cursosConFalta, lista);
             lista.innerHTML += `<li>⛔ No tiene curso disponible en este momento</li>`;
             bloquearBotones();
             return;
@@ -408,30 +433,35 @@ function mostrarPanelDocente() {
         }
     } else {
         // No hay curso disponible ahora - mostrar completados y pendientes
-        mostrarCursosCompletadosYPendientes(grupos, cursosCompletados, lista);
+        mostrarCursosCompletadosYPendientes(grupos, cursosCompletados, cursosConAsistencia, cursosConFalta, lista);
         lista.innerHTML += `<li>⛔ No tiene curso disponible en este momento</li>`;
         bloquearBotones();
     }
 }
 
-function mostrarCursosCompletadosYPendientes(grupos, cursosCompletados, lista) {
+function mostrarCursosCompletadosYPendientes(grupos, cursosCompletados, cursosConAsistencia, cursosConFalta, lista) {
     let hayCompletados = false;
     let hayPendientes = false;
 
     grupos.forEach(grupo => {
-        const algunoCompletado = grupo.some(c => cursosCompletados.includes(c.id_curso));
-        const todosCompletados = grupo.every(c => cursosCompletados.includes(c.id_curso));
+        const algunoRegistrado = grupo.some(c => cursosConAsistencia.includes(c.id_curso));
 
-        if (algunoCompletado) {
+        if (algunoRegistrado) {
             if (!hayCompletados) {
-                lista.innerHTML += `<li><strong>✅ Cursos completados hoy</strong></li>`;
+                lista.innerHTML += `<li><strong>✅ Cursos registrados hoy</strong></li>`;
                 hayCompletados = true;
             }
             grupo.forEach((curso, idx) => {
                 const completado = cursosCompletados.includes(curso.id_curso);
-                const prefijo = completado ? (idx === 0 ? '✓' : '↳✓') : (idx === 0 ? '○' : '↳○');
-                const estilo = completado ? '' : ' style="opacity: 0.6"';
-                lista.innerHTML += `<li${estilo}>${prefijo} ${curso.curso} (${curso.inicio} - ${curso.fin})</li>`;
+                const falta = cursosConFalta.includes(curso.id_curso);
+                const prefijo = completado
+                    ? (idx === 0 ? '✓' : '↳✓')
+                    : falta
+                        ? (idx === 0 ? '✗' : '↳✗')
+                        : (idx === 0 ? '○' : '↳○');
+                const estilo = completado ? '' : falta ? ' style="opacity: 0.85"' : ' style="opacity: 0.6"';
+                const estado = falta ? ' (FALTA)' : '';
+                lista.innerHTML += `<li${estilo}>${prefijo} ${curso.curso} (${curso.inicio} - ${curso.fin})${estado}</li>`;
             });
         } else {
             if (!hayPendientes) {

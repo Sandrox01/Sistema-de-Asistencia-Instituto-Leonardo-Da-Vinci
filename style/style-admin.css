@@ -19,6 +19,21 @@
   border: 1px solid rgba(59,130,246,0.35);
 }
 
+.badge-futuro {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  margin-left: 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+}
+
 /* ===== BOTONES DE ACCIÓN EN TABLAS ===== */
 .btn-actions {
   display: flex !important;
@@ -247,6 +262,15 @@ table tr.is-inactive td {
 
 table tr.is-inactive td:first-child {
   border-left: 4px solid rgba(220, 38, 38, 0.45) !important;
+}
+
+table tr.is-future td {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #64748b !important;
+}
+
+table tr.is-future td:first-child {
+  border-left: 4px solid rgba(100, 116, 139, 0.45) !important;
 }
 
 .activaciones-historial {
@@ -2704,6 +2728,10 @@ tbody tr:hover {
   padding: 14px 16px;
   margin: 12px auto 0;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+}
+
+.form-container.form-curso {
+  max-width: 520px;
 }
 
 .form-container.form-wide {

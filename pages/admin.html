@@ -52,10 +52,6 @@
             <i class="fa-solid fa-book"></i> Cursos
           </button>
 
-          <button class="btn-side" data-seccion="periodos" onclick="irSeccion('periodos')">
-            <i class="fa-solid fa-calendar-days"></i> Periodos
-          </button>
-
           <button class="btn-side" data-seccion="horarios" onclick="irSeccion('horarios')">
             <i class="fa-solid fa-clock"></i> Horarios
           </button>
@@ -244,7 +240,7 @@
               <button id="toggleDocentes" class="btn-secondary" type="button">
                 <i class="fa-solid fa-eye"></i> Ver todos
               </button>
-              <button class="btn-primary btn-nuevo" onclick="nuevoDocente()">
+              <button class="btn-primary btn-nuevo">
                 <i class="fa-solid fa-user-plus"></i> Nuevo Docente
               </button>
             </div>
@@ -277,7 +273,7 @@
               <button id="toggleCursos" class="btn-secondary" type="button">
                 <i class="fa-solid fa-eye"></i> Ver todos
               </button>
-              <button class="btn-primary btn-nuevo" onclick="nuevoCurso()">
+              <button class="btn-primary btn-nuevo">
                 <i class="fa-solid fa-plus"></i> Nuevo Curso
               </button>
             </div>
@@ -288,51 +284,21 @@
         <table id="tablaCursos">
           <thead>
             <tr>
+              <th>Carrera</th>
               <th>Curso</th>
+              <th>Turno</th>
+              <th style="width: 140px;">Inicio</th>
+              <th style="width: 140px;">Fin</th>
               <th style="width: 120px;">Acciones</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td colspan="2" style="text-align:center; color:#888;">Cargando...</td>
+              <td colspan="6" style="text-align:center; color:#888;">Cargando...</td>
             </tr>
           </tbody>
         </table>
         <div class="table-pagination" id="paginationCursos"></div>
-      </section>
-
-      <!-- ===== PERIODOS ===== -->
-      <section id="periodos" class="card seccion-panel oculto">
-        <div class="section-header">
-          <h2><i class="fa-solid fa-calendar-days"></i> Gestión de Periodos</h2>
-            <div class="section-actions">
-              <button id="togglePeriodos" class="btn-secondary" type="button">
-                <i class="fa-solid fa-eye"></i> Ver todos
-              </button>
-              <button class="btn-primary btn-nuevo" onclick="nuevoPeriodo()">
-                <i class="fa-solid fa-plus"></i> Nuevo Periodo
-              </button>
-            </div>
-        </div>
-
-        <input class="search-input" id="buscarPeriodo" placeholder="Buscar periodo por nombre o fecha (dd/mm/aaaa)...">
-
-        <table id="tablaPeriodos">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Fecha inicio</th>
-              <th>Fecha fin</th>
-              <th style="width: 140px;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colspan="4" style="text-align:center; color:#888;">Cargando...</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="table-pagination" id="paginationPeriodos"></div>
       </section>
 
       <!-- ===== HORARIOS ===== -->
@@ -343,7 +309,7 @@
               <button id="toggleHorarios" class="btn-secondary" type="button">
                 <i class="fa-solid fa-eye"></i> Ver todos
               </button>
-              <button class="btn-primary btn-nuevo" onclick="nuevoHorario()">
+              <button class="btn-primary btn-nuevo">
                 <i class="fa-solid fa-calendar-plus"></i> Nuevo Horario
               </button>
             </div>
@@ -355,7 +321,9 @@
           <thead>
             <tr>
               <th>Docente</th>
+              <th>Carrera</th>
               <th>Curso</th>
+              <th>Turno</th>
               <th>Día</th>
               <th>Inicio</th>
               <th>Fin</th>
@@ -364,7 +332,7 @@
           </thead>
           <tbody>
             <tr>
-              <td colspan="6" style="text-align:center; color:#888;">Cargando...</td>
+              <td colspan="8" style="text-align:center; color:#888;">Cargando...</td>
             </tr>
           </tbody>
         </table>
@@ -420,12 +388,14 @@
             <tr>
               <th>Docente</th>
               <th>DNI</th>
+              <th>Carrera</th>
+              <th>Turno</th>
               <th style="width: 180px;">Descargar</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td colspan="3" style="text-align:center; color:#888;">Cargando...</td>
+              <td colspan="5" style="text-align:center; color:#888;">Cargando...</td>
             </tr>
           </tbody>
         </table>
@@ -452,23 +422,23 @@
         <input class="search-input" id="buscarAsistencia" placeholder="Buscar asistencia por fecha, docente o curso...">
 
         <div class="asistencia-highlights">
-          <div class="highlight-card total" onclick="aplicarFiltroChip('total')" style="cursor:pointer;" title="Ver todos">
+          <div class="highlight-card total" role="button" tabindex="0" aria-label="Ver todos los registros" onclick="aplicarFiltroChip('total')" style="cursor:pointer;" title="Ver todos">
             <span class="label">Registros visibles</span>
             <strong id="chipTotalAsistencias">0</strong>
           </div>
-          <div class="highlight-card encurso" onclick="aplicarFiltroChip('encurso')" style="cursor:pointer;" title="Filtrar registros en curso">
+          <div class="highlight-card encurso" role="button" tabindex="0" aria-label="Filtrar registros en curso" onclick="aplicarFiltroChip('encurso')" style="cursor:pointer;" title="Filtrar registros en curso">
             <span class="label">En curso</span>
             <strong id="chipEnCurso">0</strong>
           </div>
-          <div class="highlight-card tardanza" onclick="aplicarFiltroChip('tardanza')" style="cursor:pointer;" title="Filtrar tardanzas">
+          <div class="highlight-card tardanza" role="button" tabindex="0" aria-label="Filtrar tardanzas" onclick="aplicarFiltroChip('tardanza')" style="cursor:pointer;" title="Filtrar tardanzas">
             <span class="label">Tardanzas</span>
             <strong id="chipTardanzas">0</strong>
           </div>
-          <div class="highlight-card recuperacion" onclick="aplicarFiltroChip('recuperacion')" style="cursor:pointer;" title="Filtrar recuperaciones">
+          <div class="highlight-card recuperacion" role="button" tabindex="0" aria-label="Filtrar recuperaciones" onclick="aplicarFiltroChip('recuperacion')" style="cursor:pointer;" title="Filtrar recuperaciones">
             <span class="label">Sesiones de recuperación</span>
             <strong id="chipRecuperaciones">0</strong>
           </div>
-          <div class="highlight-card faltas" onclick="aplicarFiltroChip('falta')" style="cursor:pointer;" title="Filtrar faltas">
+          <div class="highlight-card faltas" role="button" tabindex="0" aria-label="Filtrar faltas" onclick="aplicarFiltroChip('falta')" style="cursor:pointer;" title="Filtrar faltas">
             <span class="label">Faltas</span>
             <strong id="chipFaltas">0</strong>
           </div>
