@@ -10,7 +10,29 @@ const ROOT_PATH = path.join(__dirname, "..");
 const PUBLIC_PAGES_PATH = path.join(ROOT_PATH, "pages");
 const PUBLIC_STYLE_PATH = path.join(ROOT_PATH, "style");
 const PUBLIC_SCRIPTS_PATH = path.join(ROOT_PATH, "scripts");
-const PUBLIC_REPORTS_PATH = path.join(ROOT_PATH, "reportes");
+function resolveBasePath(envValue, fallback) {
+  if (!envValue) return fallback;
+  return path.isAbsolute(envValue) ? envValue : path.resolve(ROOT_PATH, envValue);
+}
+
+const DEFAULT_REPORTS_PATH = path.join(ROOT_PATH, "reportes");
+const DEFAULT_SEMESTRES_PATH = path.join(ROOT_PATH, "semestres");
+const REPORTS_BASE_PATH = resolveBasePath(process.env.REPORTS_PATH, DEFAULT_REPORTS_PATH);
+const SEMESTRES_BASE_PATH = resolveBasePath(process.env.SEMESTRES_PATH, DEFAULT_SEMESTRES_PATH);
+
+function ensureDirectory(dir, label) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    if (label) {
+      console.log(`🗂️ Carpeta creada para ${label}: ${dir}`);
+    }
+  }
+}
+
+ensureDirectory(REPORTS_BASE_PATH, "reportes");
+ensureDirectory(SEMESTRES_BASE_PATH, "semestres");
+
+const PUBLIC_REPORTS_PATH = REPORTS_BASE_PATH;
 
 const app = express();
 app.use(cors());
@@ -24,6 +46,9 @@ app.use("/reportes", express.static(PUBLIC_REPORTS_PATH));
 const ADMIN_STREAM_KEEP_ALIVE_MS = 30 * 1000;
 const adminStreamClients = new Map();
 let adminStreamClientSeq = 1;
+const LIMPIEZA_PERIODOS_INTERVALO_MS = 60 * 60 * 1000; // Revisar periodos cada hora
+let limpiezaPeriodosEnCurso = false;
+let ultimaGeneracionMensual = null;
 
 function broadcastAdminRefresh(origin = "unknown", extra = {}) {
   if (!adminStreamClients.size) return;
@@ -2791,23 +2816,31 @@ async function revisarGeneracionAutomatica() {
         const manana = new Date(now);
         manana.setDate(manana.getDate() + 1);
         
-        // Ejecutar a las 23:00 del último día del mes
-        if (manana.getDate() === 1 && now.getHours() === 23 && now.getMinutes() === 0) {
-            console.log("🚀 Iniciando generación automática de reportes de fin de mes...");
+        const esUltimoDia = manana.getDate() === 1;
+        const horaLimiteAlcanzada = now.getHours() >= 23; // toleramos 23:00 en adelante
+        const claveMes = `${now.getFullYear()}-${now.getMonth() + 1}`;
+
+        if (esUltimoDia && horaLimiteAlcanzada) {
+          if (ultimaGeneracionMensual === claveMes) {
+            return; // ya se ejecutó por este mes
+          }
+
+          ultimaGeneracionMensual = claveMes;
+          console.log("🚀 Iniciando generación automática de reportes de fin de mes...");
             
             const mesAnterior = new Date(now); // Estamos en fin de mes, el reporte es de ESTE mes
             const nombreMes = mesAnterior.toLocaleString('es-ES', { month: 'long' });
             const anio = mesAnterior.getFullYear();
             const nombreCarpeta = `${nombreMes}_${anio}`;
-
-            const rutaReportes = path.join(ROOT_PATH, 'reportes');
-            if (!fs.existsSync(rutaReportes)) {
-              fs.mkdirSync(rutaReportes, { recursive: true });
-              console.log(`🗂️ Carpeta base de reportes creada: ${rutaReportes}`);
-            }
+            const fechaInicioMes = new Date(mesAnterior.getFullYear(), mesAnterior.getMonth(), 1)
+              .toISOString()
+              .slice(0, 10);
+            const fechaFinMes = new Date(mesAnterior.getFullYear(), mesAnterior.getMonth() + 1, 0)
+              .toISOString()
+              .slice(0, 10);
 
             // 1. Crear carpeta mensual específica
-            const carpetaPath = path.join(rutaReportes, nombreCarpeta);
+            const carpetaPath = path.join(REPORTS_BASE_PATH, nombreCarpeta);
             if (!fs.existsSync(carpetaPath)){
               fs.mkdirSync(carpetaPath, { recursive: true });
               console.log(`🆕 Carpeta mensual creada (${nombreMes} ${anio}): ${carpetaPath}`);
@@ -2823,12 +2856,21 @@ async function revisarGeneracionAutomatica() {
             
             for (const doc of docentes) {
                 try {
-                    const workbook = await crearWorkbookDocente(doc.id_docente, doc.nombre, doc.dni);
+                    const workbook = await crearWorkbookDocente(doc.id_docente, doc.nombre, doc.dni, {
+                      fechaInicio: fechaInicioMes,
+                      fechaFin: fechaFinMes,
+                    });
                     const nombreLimpio = doc.nombre.replace(/[^a-zA-Z0-9]/g, "_");
-                    const filename = `reporte_${nombreLimpio}.xlsx`;
-                    const filePath = path.join(carpetaPath, filename);
-                    console.log(`   ↳ Preparando ${filename} (${doc.nombre}) en ${carpetaRelativa}`);
-                    
+                    const slugDocente = nombreLimpio || doc.dni || `docente_${doc.id_docente}`;
+                    const carpetaDocente = path.join(carpetaPath, slugDocente);
+                    if (!fs.existsSync(carpetaDocente)) {
+                      fs.mkdirSync(carpetaDocente, { recursive: true });
+                    }
+                    const filename = `reporte_${slugDocente}.xlsx`;
+                    const filePath = path.join(carpetaDocente, filename);
+                    const carpetaDocenteRelativa = path.relative(ROOT_PATH, carpetaDocente);
+                    console.log(`   ↳ Preparando ${filename} (${doc.nombre}) en ${carpetaDocenteRelativa}`);
+
                     await workbook.xlsx.writeFile(filePath);
                     const relativeFilePath = path.relative(ROOT_PATH, filePath);
                     console.log(`      • Reporte mensual guardado (${nombreMes} ${anio}): ${relativeFilePath}`);
@@ -2850,30 +2892,27 @@ setInterval(revisarGeneracionAutomatica, 60 * 1000);
 
 
 /* ================= LIMPIEZA AUTOMÁTICA ================= */
-async function limpiarPeriodosVencidos() {
+async function limpiarPeriodosVencidos({ motivo = "manual" } = {}) {
+  if (limpiezaPeriodosEnCurso) {
+    console.log(`⏳ Limpieza de periodos ya en curso. Se omite disparo (${motivo}).`);
+    return;
+  }
+
+  limpiezaPeriodosEnCurso = true;
+
   try {
-    console.log("🧹 Ejecutando verificación de periodos vencidos...");
-    
-    // Obtener periodos vencidos hace más de 1 día (margen de seguridad)
-    // fecha_fin < (HOY - 1 día) Y que estén activos
+    // Obtener periodos vencidos cuyo fin ya pasó respecto al día actual
     const [periodos] = await db.query(`
       SELECT id_periodo, nombre, fecha_inicio, fecha_fin 
       FROM periodos 
-      WHERE fecha_fin < DATE_SUB(CURDATE(), INTERVAL 1 DAY) AND activacion = 1
+      WHERE fecha_fin < CURDATE() AND activacion = 1
     `);
 
     if (periodos.length === 0) {
-      console.log("✅ No hay periodos vencidos activos para desactivar.");
       return;
     }
 
-    console.log(`⚠️ Se encontraron ${periodos.length} periodos vencidos. Procediendo a desactivar...`);
-
-    const baseSemestres = path.join(ROOT_PATH, "semestres");
-    if (!fs.existsSync(baseSemestres)) {
-      fs.mkdirSync(baseSemestres, { recursive: true });
-      console.log(`🗂️ Carpeta base de semestres creada: ${baseSemestres}`);
-    }
+    console.log(`🧹 (${motivo}) Se limpiarán ${periodos.length} periodos vencidos.`);
 
     for (const p of periodos) {
       // 1. Desactivar horarios vinculados al periodo
@@ -2888,7 +2927,7 @@ async function limpiarPeriodosVencidos() {
       const nombreCarpeta = p.nombre
         ? p.nombre.replace(/[^a-zA-Z0-9-_]/g, "_")
         : `periodo_${p.id_periodo}`;
-      const carpetaPeriodo = path.join(baseSemestres, nombreCarpeta);
+      const carpetaPeriodo = path.join(SEMESTRES_BASE_PATH, nombreCarpeta);
       if (!fs.existsSync(carpetaPeriodo)) {
         fs.mkdirSync(carpetaPeriodo, { recursive: true });
         console.log(`🆕 Carpeta creada para el periodo '${p.nombre}': ${carpetaPeriodo}`);
@@ -2904,7 +2943,7 @@ async function limpiarPeriodosVencidos() {
         SELECT DISTINCT h.id_docente, d.nombre, d.dni
         FROM horarios h
         JOIN docentes d ON h.id_docente = d.id_docente
-        WHERE h.id_periodo = ?
+        WHERE h.id_periodo = ? AND d.activacion = 1
       `, [p.id_periodo]);
 
       if (!docentesPeriodo.length) {
@@ -2935,13 +2974,17 @@ async function limpiarPeriodosVencidos() {
     console.log("✅ Proceso de desactivación completado.");
   } catch (err) {
     console.error("❌ Error en desactivación de periodos:", err);
+  } finally {
+    limpiezaPeriodosEnCurso = false;
   }
 }
+
+setInterval(() => limpiarPeriodosVencidos({ motivo: "intervalo" }), LIMPIEZA_PERIODOS_INTERVALO_MS);
 
 /* ================= SERVER ================= */
 app.listen(3000, () => {
   console.log("✅ Servidor corriendo en http://localhost:3000");
   
   // Ejecutar limpieza al iniciar el servidor
-  limpiarPeriodosVencidos();
+  limpiarPeriodosVencidos({ motivo: "inicio-servidor" });
 });
