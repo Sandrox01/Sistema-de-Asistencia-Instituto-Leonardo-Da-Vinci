@@ -6,6 +6,7 @@ Aplicación full-stack para marcar asistencia docente, registrar incidencias y a
 - **Marcación biométrica simulada**: los docentes ingresan su DNI y marcan entrada/salida desde la interfaz descrita en [pages/index.html](pages/index.html) con validaciones de tardanza, bloqueos automáticos y activaciones especiales.
 - **Panel administrativo completo**: [pages/admin.html](pages/admin.html) + [scripts/admin-panel.js](scripts/admin-panel.js) permiten gestionar docentes, cursos, periodos, horarios, bloqueos, activaciones y reportes en Excel.
 - **Automatizaciones en segundo plano**: [backend/server.js](backend/server.js) ejecuta cada minuto la tarea `ejecutarFaltasAutomaticasProgramadas()` y vigila la expiración de periodos con `limpiarPeriodosVencidos()` y `revisarGeneracionAutomatica()`.
+ - **Automatizaciones en segundo plano**: [backend/server.js](backend/server.js) ejecuta cada minuto la tarea `ejecutarFaltasAutomaticasProgramadas()` y vigila la expiración de periodos con `limpiarPeriodosVencidos()` y `revisarGeneracionAutomatica()`.
 - **Exportes y respaldos**: Generación de libros XLSX por docente/periodo usando ExcelJS, y rutas auxiliares en [backend/routes/backup.js](backend/routes/backup.js) para copias de seguridad.
 - **Actualización en vivo**: el panel admin escucha `/api/admin/stream` para refrescar listas y métricas sin necesidad de recargar la página.
 
@@ -45,18 +46,28 @@ npm install
 
 # 3. Inicia el servidor (sirve API + frontend)
 npm start
-# o, para recarga automática en desarrollo
-npm run dev
+
 ```
 
 - La aplicación completa estará disponible en `http://localhost:3000/`.
 - El frontend ya no depende de "Go Live": Express expone `pages/`, `style/`, `scripts/` y `reportes` como contenido estático.
 
+## Rutas de almacenamiento para exportes
+- Las carpetas de salida de los Excel automáticos se configuran en [backend/server.js](backend/server.js) mediante `DEFAULT_REPORTS_PATH` (reportes mensuales) y `DEFAULT_SEMESTRES_PATH` (históricos por periodo). Por defecto apuntan a `reportes/` y `semestres/` dentro del proyecto.
+- Si quieres fijar rutas absolutas, reemplaza esas constantes por el nuevo path, por ejemplo:
+	```js
+	const DEFAULT_REPORTS_PATH = "D:/Respaldos/reportes";
+	const DEFAULT_SEMESTRES_PATH = "D:/Respaldos/semestres";
+	```
+	Toda la app consumirá esas nuevas rutas y `ensureDirectory()` creará la carpeta si no existe.
+- También puedes definir variables de entorno `REPORTS_PATH` y/o `SEMESTRES_PATH` antes de ejecutar `npm start`; el servidor las resolverá automáticamente (acepta rutas absolutas o relativas al proyecto).
+- Tanto los cierres mensuales como los exportes de periodo omiten docentes inactivos para simular eliminación lógica.
+
 ## Credenciales y accesos
 | Rol / ruta | Cómo acceder | Credenciales por defecto |
 | ---------- | ------------ | ------------------------ |
 | **Panel docente** (`/`) | Ingresar DNI real del docente | No requiere contraseña; valida contra tabla `docentes` |
-| **Panel administrativo** (`/admin.html`) | Desde la pantalla principal ingresa el DNI especial y luego la contraseña | DNI administrador: **16769288** (constante `DNI_ADMIN` en [scripts/app.js](scripts/app.js)).<br>Contraseña del panel: **admin123** (constante `ADMIN_PASSWORD` en [scripts/admin-panel.js](scripts/admin-panel.js)). |
+| **Panel administrativo** (`/admin.html`) | Desde la pantalla principal ingresa el DNI especial y luego la contraseña | DNI administrador: **-----** (constante `DNI_ADMIN` en [scripts/app.js](scripts/app.js)).<br>Contraseña del panel: **-----** (constante `ADMIN_PASSWORD` en [scripts/admin-panel.js](scripts/admin-panel.js)). |
 
 > Cambia estos valores en los archivos mencionados o migra a variables de entorno antes de desplegar en producción.
 
@@ -74,8 +85,8 @@ Consulta [backend/server.js](backend/server.js) para revisar argumentos/validaci
 
 ## Automatizaciones y tareas programadas
 - `ejecutarFaltasAutomaticasProgramadas()` se dispara cada minuto para registrar faltas según horarios activos y grupos continuos.
-- `revisarGeneracionAutomatica()` verifica el último día del mes (23:00) y genera reportes XLSX por docente en `reportes/<mes_año>/`.
-- `limpiarPeriodosVencidos()` desactiva periodos terminados, deshabilita horarios asociados y exporta asistencias del periodo a `semestres/<nombre_periodo>/`.
+- `revisarGeneracionAutomatica()` detecta el último día del mes (a partir de las 23:00) y genera reportes XLSX por docente en `reportes/<mes_año>/<docente>/`, filtrando únicamente las asistencias del mes corriente.
+- `limpiarPeriodosVencidos()` desactiva periodos terminados, deshabilita horarios asociados y exporta asistencias del periodo a `semestres/<nombre_periodo>/`, limitando las fechas al rango del periodo y excluyendo docentes inactivos.
 
 Estas tareas se inicializan cuando el servidor arranca (`app.listen`). Si MySQL no está disponible, se registrará `ECONNREFUSED`; asegúrate de que la base esté activa antes de iniciar.
 
